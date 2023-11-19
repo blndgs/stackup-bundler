@@ -498,6 +498,21 @@ func handleStdEthereumRPCRequest(c *gin.Context, ethClient *ethclient.Client, re
 	}
 
 	result, err := ethClient.CallContract(c, callMsg, blockNumber)
+	// The erc-4337 spec has a special case for revert errors, where the revert data is returned as the result
+	const revertErrorKey = "execution reverted"
+	if err != nil && err.Error() == revertErrorKey {
+		strResult := extractDataFromUnexportedError(err)
+		if strResult != "" {
+			c.JSON(http.StatusOK, gin.H{
+				"result":  strResult,
+				"jsonrpc": "2.0",
+				"id":      requestData["id"],
+			})
+
+			return
+		}
+	}
+
 	if err != nil {
 		jsonrpcError(c, -32603, "Internal error", err.Error(), nil)
 		return
@@ -508,4 +523,27 @@ func handleStdEthereumRPCRequest(c *gin.Context, ethClient *ethclient.Client, re
 		"jsonrpc": "2.0",
 		"id":      requestData["id"],
 	})
+}
+
+// extractDataFromUnexportedError extracts the "Data" field from *rpc.jsonError that is not exported
+// using reflection.
+func extractDataFromUnexportedError(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	val := reflect.ValueOf(err)
+	if val.Kind() == reflect.Ptr && !val.IsNil() {
+		// Assuming jsonError is a struct
+		errVal := val.Elem()
+
+		// Check if the struct has a field named "Data".
+		dataField := errVal.FieldByName("Data")
+		if dataField.IsValid() && dataField.CanInterface() {
+			// Assuming the data field is a string
+			return dataField.Interface().(string)
+		}
+	}
+
+	return ""
 }
