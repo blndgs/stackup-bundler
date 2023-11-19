@@ -5,13 +5,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"reflect"
+	"strconv"
+	"strings"
 
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gin-gonic/gin"
-	"github.com/stackup-wallet/stackup-bundler/pkg/errors"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+
+	"github.com/stackup-wallet/stackup-bundler/pkg/errors"
 )
 
 func jsonrpcError(c *gin.Context, code int, message string, data any, id *float64) {
@@ -33,7 +40,7 @@ func jsonrpcError(c *gin.Context, code int, message string, data any, id *float6
 // params spread as arguments.
 //
 // If request is valid it will also set the data on the Gin context with the key "json-rpc-request".
-func Controller(api interface{}) gin.HandlerFunc {
+func Controller(api interface{}, ethRPCClient *ethclient.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.Request.Method != "POST" {
 			jsonrpcError(c, -32700, "Parse error", "POST method excepted", nil)
@@ -72,6 +79,12 @@ func Controller(api interface{}) gin.HandlerFunc {
 		method, ok := data["method"].(string)
 		if !ok {
 			jsonrpcError(c, -32600, "Invalid Request", "No or invalid 'method' in request", &id)
+			return
+		}
+
+		if isStdEthereumRPCMethod(method) {
+			// Proxy the request to the Ethereum node
+			handleStdEthereumRPCRequest(c, ethRPCClient, data)
 			return
 		}
 
@@ -411,4 +424,88 @@ func Controller(api interface{}) gin.HandlerFunc {
 			})
 		}
 	}
+}
+
+func isStdEthereumRPCMethod(method string) bool {
+	bundlerMethods := map[string]bool{
+		"eth_senduseroperation":         true,
+		"eth_estimateuseroperationgas":  true,
+		"eth_getuseroperationreceipt":   true,
+		"eth_getuseroperationbyhash":    true,
+		"eth_supportedentrypoints":      true,
+		"eth_chainid":                   true,
+		"debug_bundler_clearstate":      true,
+		"debug_bundler_dumpmempool":     true,
+		"debug_bundler_sendbundlenow":   true,
+		"debug_bundler_setbundlingmode": true,
+		// Add any other bundler-specific methods here
+	}
+
+	// Check if the method is NOT a bundler-specific method
+	_, isBundlerMethod := bundlerMethods[strings.ToLower(method)]
+
+	return !isBundlerMethod
+}
+
+func handleStdEthereumRPCRequest(c *gin.Context, ethClient *ethclient.Client, requestData map[string]any) {
+	params := requestData["params"].([]interface{})
+
+	var (
+		callParams map[string]interface{}
+		to         string
+		data       string
+		callMsg    ethereum.CallMsg
+	)
+	if len(params) > 0 {
+		// Assuming the first param is the address and the second is the data
+		// This needs to be adjusted according to the specific RPC method and parameters
+		ok := false
+		callParams, ok = params[0].(map[string]interface{})
+		if !ok {
+			jsonrpcError(c, -32602, "Invalid params", "First parameter should be a map", nil)
+			return
+		}
+
+		to, ok = callParams["to"].(string)
+		if !ok {
+			jsonrpcError(c, -32602, "Invalid params", "Contract address (to) not provided or invalid", nil)
+			return
+		}
+
+		data, ok = callParams["data"].(string)
+		if !ok {
+			jsonrpcError(c, -32602, "Invalid params", "Data not provided or invalid", nil)
+			return
+		}
+
+		address := common.HexToAddress(to)
+		callMsg = ethereum.CallMsg{
+			To:   &address,
+			Data: common.FromHex(data),
+		}
+	}
+
+	var blockNumber *big.Int
+	blockParam := params[1].(string)
+	if blockParam != "latest" {
+		var intBlockNumber int64
+		intBlockNumber, err := strconv.ParseInt(blockParam, 10, 64)
+		if err != nil {
+			jsonrpcError(c, -32602, "Invalid params", "Third parameter should be a block number or 'latest'", nil)
+			return
+		}
+		blockNumber = big.NewInt(intBlockNumber)
+	}
+
+	result, err := ethClient.CallContract(c, callMsg, blockNumber)
+	if err != nil {
+		jsonrpcError(c, -32603, "Internal error", err.Error(), nil)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"result":  common.Bytes2Hex(result),
+		"jsonrpc": "2.0",
+		"id":      requestData["id"],
+	})
 }
