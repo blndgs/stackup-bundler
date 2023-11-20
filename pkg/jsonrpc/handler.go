@@ -13,7 +13,9 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -40,7 +42,7 @@ func jsonrpcError(c *gin.Context, code int, message string, data any, id *float6
 // params spread as arguments.
 //
 // If request is valid it will also set the data on the Gin context with the key "json-rpc-request".
-func Controller(api interface{}, ethRPCClient *ethclient.Client) gin.HandlerFunc {
+func Controller(api interface{}, rpcClient *rpc.Client, ethRPCClient *ethclient.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.Request.Method != "POST" {
 			jsonrpcError(c, -32700, "Parse error", "POST method excepted", nil)
@@ -83,8 +85,9 @@ func Controller(api interface{}, ethRPCClient *ethclient.Client) gin.HandlerFunc
 		}
 
 		if isStdEthereumRPCMethod(method) {
+			fmt.Println("Method:", method)
 			// Proxy the request to the Ethereum node
-			handleStdEthereumRPCRequest(c, ethRPCClient, data)
+			routeStdEthereumRPCRequest(c, method, rpcClient, ethRPCClient, data)
 			return
 		}
 
@@ -447,7 +450,60 @@ func isStdEthereumRPCMethod(method string) bool {
 	return !isBundlerMethod
 }
 
-func handleStdEthereumRPCRequest(c *gin.Context, ethClient *ethclient.Client, requestData map[string]any) {
+func routeStdEthereumRPCRequest(c *gin.Context, method string, rpcClient *rpc.Client, ethClient *ethclient.Client, requestData map[string]any) {
+	const ethCall = "eth_call"
+	if strings.ToLower(method) == ethCall {
+		handleEthCallRequest(c, ethClient, requestData)
+		return
+	}
+
+	handleEthRequest(c, method, rpcClient, requestData)
+}
+
+func handleEthRequest(c *gin.Context, method string, rpcClient *rpc.Client, requestData map[string]any) {
+	// Extract params and keep them in their original type
+	params, ok := requestData["params"].([]interface{})
+	if !ok {
+		jsonrpcError(c, -32602, "Invalid params format", "Expected a slice of parameters", nil)
+		return
+	}
+
+	// Prepare a slice to hold the result references based on the method requirements
+	var result interface{}
+	switch method {
+	case "eth_getBlockByNumber":
+	case "eth_maxPriorityFeePerGas":
+		result = new(hexutil.Big)
+	default:
+		jsonrpcError(c, -32601, "Method not found", method, nil)
+		return
+	}
+
+	// Call the method with the parameters
+	err := rpcClient.Call(result, method, params...)
+	if err != nil {
+		jsonrpcError(c, -32603, "Internal error", err.Error(), nil)
+		return
+	}
+
+	// Convert result to a string representation or handle based on type
+	var resultStr string
+	switch res := result.(type) {
+	case *hexutil.Big:
+		resultStr = res.String()
+	default:
+		jsonrpcError(c, -32603, "Unexpected result type", fmt.Sprintf("%T", result), nil)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"result":  resultStr,
+		"jsonrpc": "2.0",
+		"id":      requestData["id"],
+	})
+}
+
+func handleEthCallRequest(c *gin.Context, ethClient *ethclient.Client, requestData map[string]any) {
 	params := requestData["params"].([]interface{})
 
 	var (
@@ -486,15 +542,17 @@ func handleStdEthereumRPCRequest(c *gin.Context, ethClient *ethclient.Client, re
 	}
 
 	var blockNumber *big.Int
-	blockParam := params[1].(string)
-	if blockParam != "latest" {
-		var intBlockNumber int64
-		intBlockNumber, err := strconv.ParseInt(blockParam, 10, 64)
-		if err != nil {
-			jsonrpcError(c, -32602, "Invalid params", "Third parameter should be a block number or 'latest'", nil)
-			return
+	if len(params) > 1 {
+		blockParam := params[1].(string)
+		if blockParam != "latest" {
+			var intBlockNumber int64
+			intBlockNumber, err := strconv.ParseInt(blockParam, 10, 64)
+			if err != nil {
+				jsonrpcError(c, -32602, "Invalid params", "Third parameter should be a block number or 'latest'", nil)
+				return
+			}
+			blockNumber = big.NewInt(intBlockNumber)
 		}
-		blockNumber = big.NewInt(intBlockNumber)
 	}
 
 	result, err := ethClient.CallContract(c, callMsg, blockNumber)
@@ -518,8 +576,10 @@ func handleStdEthereumRPCRequest(c *gin.Context, ethClient *ethclient.Client, re
 		return
 	}
 
+	resultStr := "0x" + common.Bytes2Hex(result)
+
 	c.JSON(http.StatusOK, gin.H{
-		"result":  common.Bytes2Hex(result),
+		"result":  resultStr,
 		"jsonrpc": "2.0",
 		"id":      requestData["id"],
 	})

@@ -193,7 +193,7 @@ func PrivateMode() {
 		g.Status(http.StatusOK)
 	})
 	handlers := []gin.HandlerFunc{
-		jsonrpc.Controller(client.NewRpcAdapter(c, d), eth),
+		jsonrpc.Controller(client.NewRpcAdapter(c, d), rpc, eth),
 		jsonrpc.WithOTELTracerAttributes(),
 	}
 	r.POST("/", handlers...)
