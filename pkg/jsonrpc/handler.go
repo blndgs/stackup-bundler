@@ -429,21 +429,21 @@ func Controller(api interface{}, rpcClient *rpc.Client, ethRPCClient *ethclient.
 	}
 }
 
-func isStdEthereumRPCMethod(method string) bool {
-	bundlerMethods := map[string]bool{
-		"eth_senduseroperation":         true,
-		"eth_estimateuseroperationgas":  true,
-		"eth_getuseroperationreceipt":   true,
-		"eth_getuseroperationbyhash":    true,
-		"eth_supportedentrypoints":      true,
-		"eth_chainid":                   true,
-		"debug_bundler_clearstate":      true,
-		"debug_bundler_dumpmempool":     true,
-		"debug_bundler_sendbundlenow":   true,
-		"debug_bundler_setbundlingmode": true,
-		// Add any other bundler-specific methods here
-	}
+var bundlerMethods = map[string]bool{
+	"eth_senduseroperation":         true,
+	"eth_estimateuseroperationgas":  true,
+	"eth_getuseroperationreceipt":   true,
+	"eth_getuseroperationbyhash":    true,
+	"eth_supportedentrypoints":      true,
+	"eth_chainid":                   true,
+	"debug_bundler_clearstate":      true,
+	"debug_bundler_dumpmempool":     true,
+	"debug_bundler_sendbundlenow":   true,
+	"debug_bundler_setbundlingmode": true,
+	// Add any other bundler-specific methods here
+}
 
+func isStdEthereumRPCMethod(method string) bool {
 	// Check if the method is NOT a bundler-specific method
 	_, isBundlerMethod := bundlerMethods[strings.ToLower(method)]
 
