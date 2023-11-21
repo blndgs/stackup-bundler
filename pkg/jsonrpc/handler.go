@@ -471,7 +471,6 @@ func handleEthRequest(c *gin.Context, method string, rpcClient *rpc.Client, requ
 	// Prepare a slice to hold the result references based on the method requirements
 	var result interface{}
 	switch method {
-	case "eth_getBlockByNumber":
 	case "eth_maxPriorityFeePerGas":
 		result = new(hexutil.Big)
 	default:
