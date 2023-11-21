@@ -13,7 +13,6 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/gin-gonic/gin"
@@ -21,6 +20,10 @@ import (
 	"golang.org/x/text/language"
 
 	"github.com/stackup-wallet/stackup-bundler/pkg/errors"
+)
+
+const (
+	ethCall = "eth_call"
 )
 
 func jsonrpcError(c *gin.Context, code int, message string, data any, id *float64) {
@@ -451,13 +454,12 @@ func isStdEthereumRPCMethod(method string) bool {
 }
 
 func routeStdEthereumRPCRequest(c *gin.Context, method string, rpcClient *rpc.Client, ethClient *ethclient.Client, requestData map[string]any) {
-	const ethCall = "eth_call"
-	if strings.ToLower(method) == ethCall {
+	switch strings.ToLower(method) {
+	case ethCall:
 		handleEthCallRequest(c, ethClient, requestData)
-		return
+	default:
+		handleEthRequest(c, method, rpcClient, requestData)
 	}
-
-	handleEthRequest(c, method, rpcClient, requestData)
 }
 
 func handleEthRequest(c *gin.Context, method string, rpcClient *rpc.Client, requestData map[string]any) {
@@ -468,38 +470,39 @@ func handleEthRequest(c *gin.Context, method string, rpcClient *rpc.Client, requ
 		return
 	}
 
-	// Prepare a slice to hold the result references based on the method requirements
-	var result interface{}
-	switch method {
-	case "eth_maxPriorityFeePerGas":
-		result = new(hexutil.Big)
-	default:
-		jsonrpcError(c, -32601, "Method not found", method, nil)
+	// Call the method with the parameters
+	raw, err := rpcCall(c, method, rpcClient, params)
+	if err != nil {
 		return
 	}
 
-	// Call the method with the parameters
-	err := rpcClient.Call(result, method, params...)
+	sendRawJson(c, raw, requestData["id"])
+
+}
+
+func rpcCall(c *gin.Context, method string, rpcClient *rpc.Client, params []interface{}) (json.RawMessage, error) {
+	var raw json.RawMessage
+	err := rpcClient.CallContext(c, &raw, method, params...)
 	if err != nil {
 		jsonrpcError(c, -32603, "Internal error", err.Error(), nil)
-		return
+		return nil, err
 	}
+	return raw, nil
+}
 
-	// Convert result to a string representation or handle based on type
-	var resultStr string
-	switch res := result.(type) {
-	case *hexutil.Big:
-		resultStr = res.String()
-	default:
-		jsonrpcError(c, -32603, "Unexpected result type", fmt.Sprintf("%T", result), nil)
-		return
+func sendRawJson(c *gin.Context, raw json.RawMessage, id any) {
+	c.Writer.Header().Set("Content-Type", "application/json")
+	c.Writer.WriteHeader(http.StatusOK)
+
+	// Construct the JSON response manually
+	response := fmt.Sprintf(`{"result": %s, "jsonrpc": "2.0", "id": %v}`, raw, id)
+
+	// Write the response
+	_, writeErr := c.Writer.Write([]byte(response))
+	if writeErr != nil {
+		// Handle error in writing response
+		jsonrpcError(c, -32603, "Internal error", writeErr.Error(), nil)
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"result":  resultStr,
-		"jsonrpc": "2.0",
-		"id":      requestData["id"],
-	})
 }
 
 func handleEthCallRequest(c *gin.Context, ethClient *ethclient.Client, requestData map[string]any) {
