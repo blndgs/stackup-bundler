@@ -53,6 +53,12 @@ func TestMain(m *testing.M) {
 	// Wait for Geth to be ready
 	waitForGeth()
 
+	// Execute the sendtx.sh script
+	err = executeSendTxScript()
+	if err != nil {
+		log.Fatalf("Failed to execute sendtx.sh script: %v", err)
+	}
+
 	client = connectToGeth()
 	defer client.Close()
 
@@ -68,6 +74,13 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+func executeSendTxScript() error {
+	cmd := exec.Command("./sendtx.sh")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 func logOutput(pipe io.ReadCloser) {
 	scanner := bufio.NewScanner(pipe)
 	for scanner.Scan() {
@@ -76,7 +89,7 @@ func logOutput(pipe io.ReadCloser) {
 }
 
 func waitForGeth() {
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(time.Millisecond * 300)
 	defer ticker.Stop()
 
 	timeout := time.After(30 * time.Second)
@@ -96,7 +109,8 @@ func waitForGeth() {
 }
 
 func connectToGeth() *ethclient.Client {
-	client, err := ethclient.Dial(LocalGeth)
+	var err error
+	client, err = ethclient.Dial(LocalGeth)
 	if err != nil {
 		panic("Failed to connect to Geth: " + err.Error())
 	}
@@ -109,5 +123,5 @@ func TestBalance(t *testing.T) {
 	balance, err := client.BalanceAt(context.Background(), addr, nil)
 	assert.NoError(t, err, "Failed to retrieve balance")
 	assert.NotNil(t, balance, "Balance should not be nil")
-	// more tests...
+	assert.Equal(t, balance.String(), "1000000000000000000", "Balance should be greater than 0")
 }
