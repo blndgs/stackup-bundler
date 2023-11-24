@@ -3,6 +3,7 @@ package int_tests
 import (
 	"bufio"
 	"context"
+	"crypto/ecdsa"
 	"io"
 	"log"
 	"net/http"
@@ -12,13 +13,18 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/joho/godotenv"
 	"github.com/stretchr/testify/assert"
 )
 
 const LocalGeth = "http://localhost:8545"
 
-var client *ethclient.Client
+var (
+	client    *ethclient.Client
+	signerKey *ecdsa.PrivateKey
+)
 
 func TestMain(m *testing.M) {
 	// Check if Geth is in the user's path
@@ -45,6 +51,9 @@ func TestMain(m *testing.M) {
 	if err := gethCmd.Start(); err != nil {
 		log.Fatal("Failed to start Geth:", err)
 	}
+	defer terminateGeth(gethCmd)
+
+	setSignerKey()
 
 	// Asynchronously log Geth output
 	go logOutput(gethStdout)
@@ -65,13 +74,31 @@ func TestMain(m *testing.M) {
 	// Run tests
 	code := m.Run()
 
-	// Terminate Geth
+	os.Exit(code)
+}
+
+func terminateGeth(gethCmd *exec.Cmd) {
 	if err := gethCmd.Process.Kill(); err != nil {
-		println("Failed to kill Geth process:", err.Error())
-		os.Exit(1)
+		log.Println("Failed to kill Geth process:", err.Error())
+	}
+}
+
+func setSignerKey() {
+	if err := godotenv.Load(); err != nil {
+		log.Fatalf("Error loading .env file: %v", err)
 	}
 
-	os.Exit(code)
+	// Retrieve the prv value
+	var privateKeyStr string
+	if privateKeyStr = os.Getenv("PRIVATE_KEY"); privateKeyStr == "" {
+		log.Fatal("PRIVATE_KEY environment variable is not set")
+	}
+	// Convert PRIVATE_KEY to ECDSA private key
+	var err error
+	signerKey, err = crypto.HexToECDSA(privateKeyStr)
+	if err != nil {
+		log.Fatalf("Invalid PRIVATE_KEY: %v", err)
+	}
 }
 
 func executeSendTxScript() error {
