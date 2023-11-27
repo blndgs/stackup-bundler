@@ -52,7 +52,8 @@ jobs:
           instance-ids: ${{ secrets.INSTANCE_ID }}
           working-directory: /root/stackup-bundler
           command: |
-            yq w -i docker-compose.yaml 'services.stackup-bundler.image' ${{ steps.login-ecr.outputs.registry }}/${{ secrets.AWS_REPOSITORY }}:${{ github.sha }} 
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_URL }}
+            yq w -i docker-compose.yaml 'services.stackup-bundler.image' ${{ secrets.ECR_URL }}/${{ secrets.AWS_REPOSITORY }}:${{ github.sha }} 
             yq w -i docker-compose.yaml 'services.stackup-bundler.environment[0]' "ERC4337_BUNDLER_ETH_CLIENT_URL=${{ secrets.ERC4337_BUNDLER_ETH_CLIENT_URL }}" 
             yq w -i docker-compose.yaml 'services.stackup-bundler.environment[1]' "ERC4337_BUNDLER_PRIVATE_KEY=${{ secrets.ERC4337_BUNDLER_PRIVATE_KEY }}" 
             yq w -i docker-compose.yaml 'services.stackup-bundler.environment[2]' "ERC4337_BUNDLER_MAX_BATCH_GAS_LIMIT=${{ secrets.ERC4337_BUNDLER_MAX_BATCH_GAS_LIMIT }}" 
