@@ -3,7 +3,7 @@ name: Deploy to ECR
 on:
  
   push:
-    branches: [ proxy-ethnode ]
+    branches: [ proxy-ethnode, test ]
 
 jobs:
   
