@@ -22,7 +22,7 @@ import (
 const LocalGeth = "http://localhost:8545"
 
 var (
-	client    *ethclient.Client
+	ethclnt   *ethclient.Client
 	signerKey *ecdsa.PrivateKey
 )
 
@@ -68,8 +68,8 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Failed to execute sendtx.sh script: %v", err)
 	}
 
-	client = connectToGeth()
-	defer client.Close()
+	ethclnt = connectToGeth()
+	defer ethclnt.Close()
 
 	// Run tests
 	code := m.Run()
@@ -137,17 +137,17 @@ func waitForGeth() {
 
 func connectToGeth() *ethclient.Client {
 	var err error
-	client, err = ethclient.Dial(LocalGeth)
+	ethclnt, err = ethclient.Dial(LocalGeth)
 	if err != nil {
 		panic("Failed to connect to Geth: " + err.Error())
 	}
 
-	return client
+	return ethclnt
 }
 
 func TestBalance(t *testing.T) {
 	addr := common.HexToAddress("0x0A7199a96fdf0252E09F76545c1eF2be3692F46b")
-	balance, err := client.BalanceAt(context.Background(), addr, nil)
+	balance, err := ethclnt.BalanceAt(context.Background(), addr, nil)
 	assert.NoError(t, err, "Failed to retrieve balance")
 	assert.NotNil(t, balance, "Balance should not be nil")
 	assert.Equal(t, balance.String(), "1000000000000000000", "Balance should be greater than 0")
