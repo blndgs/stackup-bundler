@@ -70,6 +70,15 @@ func (r *RpcAdapter) Debug_bundler_dumpMempool(ep string) ([]map[string]any, err
 	return r.debug.DumpMempool(ep)
 }
 
+// DebugDumpBundlerState routes method call to *Debug.DumpMempool.
+func (r *RpcAdapter) DebugDumpBundlerState() (map[string]any, error) {
+	if r.debug == nil {
+		return map[string]any{}, errors.New("rpc: debug mode is not enabled")
+	}
+
+	return r.debug.DumpDebugInfo()
+}
+
 // Debug_bundler_sendBundleNow routes method calls to *Debug.SendBundleNow.
 func (r *RpcAdapter) Debug_bundler_sendBundleNow() (string, error) {
 	if r.debug == nil {
