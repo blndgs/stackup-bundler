@@ -3,7 +3,6 @@
 package checks
 
 import (
-	"fmt"
 	"math/big"
 	"time"
 
