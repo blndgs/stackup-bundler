@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
+
 	"github.com/stackup-wallet/stackup-bundler/pkg/signer"
 )
 
@@ -25,6 +26,7 @@ type Values struct {
 	MaxOpTTL                time.Duration
 	MaxOpsForUnstakedSender int
 	Beneficiary             string
+	SolverUrl               string
 
 	// Searcher mode variables.
 	EthBuilderUrl     string
@@ -81,8 +83,11 @@ func variableNotSetOrIsNil(env string) bool {
 // GetValues returns config for the bundler that has been read in from env vars. See
 // https://docs.stackup.sh/docs/packages/bundler/configure for details.
 func GetValues() *Values {
+	const solverURL = "solver_url"
+
 	// Default variables
 	viper.SetDefault("erc4337_bundler_port", 4337)
+	viper.SetDefault(solverURL, "http://localhost:7322")
 	viper.SetDefault("erc4337_bundler_data_directory", "/tmp/stackup_bundler")
 	viper.SetDefault("erc4337_bundler_supported_entry_points", "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789")
 	viper.SetDefault("erc4337_bundler_max_verification_gas", 3000000)
@@ -130,6 +135,7 @@ func GetValues() *Values {
 	_ = viper.BindEnv("erc4337_bundler_alt_mempool_ids")
 	_ = viper.BindEnv("erc4337_bundler_debug_mode")
 	_ = viper.BindEnv("erc4337_bundler_gin_mode")
+	_ = viper.BindEnv(solverURL)
 
 	// Validate required variables
 	if variableNotSetOrIsNil("erc4337_bundler_eth_client_url") {
@@ -167,10 +173,15 @@ func GetValues() *Values {
 		panic("Fatal config error: erc4337_bundler_alt_mempool_ids is set without specifying an IPFS gateway")
 	}
 
+	if variableNotSetOrIsNil(solverURL) {
+		panic("Fatal config error: solver_url not set")
+	}
+
 	// Return Values
 	privateKey := viper.GetString("erc4337_bundler_private_key")
 	ethClientUrl := viper.GetString("erc4337_bundler_eth_client_url")
 	port := viper.GetInt("erc4337_bundler_port")
+	solverUrl := viper.GetString(solverURL)
 	dataDirectory := viper.GetString("erc4337_bundler_data_directory")
 	supportedEntryPoints := envArrayToAddressSlice(viper.GetString("erc4337_bundler_supported_entry_points"))
 	beneficiary := viper.GetString("erc4337_bundler_beneficiary")
@@ -193,6 +204,7 @@ func GetValues() *Values {
 		PrivateKey:              privateKey,
 		EthClientUrl:            ethClientUrl,
 		Port:                    port,
+		SolverUrl:               solverUrl,
 		DataDirectory:           dataDirectory,
 		SupportedEntryPoints:    supportedEntryPoints,
 		Beneficiary:             beneficiary,

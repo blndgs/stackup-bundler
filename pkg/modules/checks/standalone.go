@@ -3,6 +3,7 @@
 package checks
 
 import (
+	"fmt"
 	"math/big"
 	"time"
 
@@ -10,6 +11,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/stackup-wallet/stackup-bundler/pkg/altmempools"
 	"github.com/stackup-wallet/stackup-bundler/pkg/entrypoint"
 	"github.com/stackup-wallet/stackup-bundler/pkg/entrypoint/simulation"
@@ -18,7 +21,6 @@ import (
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules"
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules/gasprice"
 	"github.com/stackup-wallet/stackup-bundler/pkg/userop"
-	"golang.org/x/sync/errgroup"
 )
 
 // Standalone exposes modules to perform basic Client and Bundler checks as specified in EIP-4337. It is
