@@ -38,6 +38,8 @@ var (
 	UserOpArr, _ = abi.NewType("tuple[]", "ops", UserOpPrimitives)
 )
 
+const IntentCallDataPrefix = "<intent>"
+
 // UserOperation represents an EIP-4337 style transaction for a smart contract account.
 type UserOperation struct {
 	Sender               common.Address `json:"sender"               mapstructure:"sender"               validate:"required"`
@@ -85,6 +87,18 @@ func (op *UserOperation) GetMaxGasAvailable() *big.Int {
 		big.NewInt(0).Mul(op.VerificationGasLimit, mul),
 		big.NewInt(0).Add(op.PreVerificationGas, op.CallGasLimit),
 	)
+}
+
+// IsIntent returns true if the UserOperation is an intent.
+func (op *UserOperation) IsIntent() bool {
+	return string(op.CallData[:len(IntentCallDataPrefix)]) == IntentCallDataPrefix
+}
+
+// RemoveIntentPrefix returns the calldata without the intent prefix.
+func (op *UserOperation) RemoveIntentPrefix() {
+	if op.IsIntent() {
+		op.CallData = op.CallData[len(IntentCallDataPrefix):]
+	}
 }
 
 // GetMaxPrefund returns the max amount of wei required to pay for gas fees by either the sender or
