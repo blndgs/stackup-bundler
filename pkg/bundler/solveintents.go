@@ -70,12 +70,12 @@ func sendToSolver(solverClient *http.Client, solverURL string, senderAddress str
 	defer resp.Body.Close()
 
 	// Decode the returned intents back into the same slice of intents
-	if err := json.NewDecoder(resp.Body).Decode(&intents); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		log.Printf("Error decoding response: %s", err.Error())
 		return nil, err
 	}
 
-	return intents, nil
+	return body.Intents, nil
 }
 
 func (i *Bundler) solveIntents(intentsBatch *EntryPointIntents) {
@@ -106,7 +106,6 @@ func (i *Bundler) solveIntents(intentsBatch *EntryPointIntents) {
 		case intentsdt.Solved:
 			// Set the solution back to the original userOp
 			intentsBatch.OrigBatch[intentsBatch.UserOpsOrigIdx[intent.Hash]].CallData = []byte(intent.CallData)
-			intentsBatch.IntentsOps[intent.Hash].CallData = []byte(intent.CallData)
 		case intentsdt.Unsolved:
 			// will be retried till expired
 			intentsBatch.Intents[intent.Hash].Status = intentsdt.Unsolved

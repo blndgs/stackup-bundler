@@ -87,7 +87,7 @@ func GetValues() *Values {
 
 	// Default variables
 	viper.SetDefault("erc4337_bundler_port", 4337)
-	viper.SetDefault(solverURL, "http://localhost:7322")
+	viper.SetDefault(solverURL, "http://localhost:7322/solve")
 	viper.SetDefault("erc4337_bundler_data_directory", "/tmp/stackup_bundler")
 	viper.SetDefault("erc4337_bundler_supported_entry_points", "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789")
 	viper.SetDefault("erc4337_bundler_max_verification_gas", 3000000)

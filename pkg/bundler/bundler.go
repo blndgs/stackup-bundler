@@ -136,7 +136,7 @@ func (i *Bundler) Process(ep common.Address) (*modules.BatchHandlerCtx, error) {
 	}
 
 	// Side effect of Solved Intent userOps:
-	// Calldata will be altered with the solution calldata from the solver.
+	// Calldata will be altered with the solution calldata received by the solver.
 	i.PreProcessIntents(ep, batch)
 
 	batch = adjustBatchSize(i.maxBatch, batch)
