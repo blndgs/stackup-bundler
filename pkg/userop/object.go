@@ -4,6 +4,7 @@ package userop
 import (
 	"encoding/json"
 	"math/big"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -91,6 +92,15 @@ func (op *UserOperation) GetMaxGasAvailable() *big.Int {
 
 // IsIntent returns true if the UserOperation is an intent.
 func (op *UserOperation) IsIntent() bool {
+	// TODO remove next line when integration is complete
+	if !strings.HasPrefix(string(op.CallData), IntentCallDataPrefix) {
+		op.CallData = []byte("<intent>" + `{"sender":"0x0A7199a96fdf0252E09F76545c1eF2be3692F46b","kind":"swap","hash":"","sellToken":"TokenA","buyToken":"TokenB","sellAmount":10,"buyAmount":5,"partiallyFillable":false,"status":"Received","createdAt":0,"expirationAt":0}`)
+	}
+
+	if len(op.CallData) < len(IntentCallDataPrefix) {
+		return false
+	}
+
 	return string(op.CallData[:len(IntentCallDataPrefix)]) == IntentCallDataPrefix
 }
 
