@@ -16,19 +16,24 @@ import (
 
 type IntentOpsBatch map[string]*userop.UserOperation
 type IntentsBatch map[string]*intentsdt.Intent
+type OrigBatchIdx map[string]int
 
 type EntryPointIntents struct {
 	EntryPoint     common.Address
-	Intents        IntentsBatch
-	IntentsOps     IntentOpsBatch
+	Intents        IntentsBatch   // set of intents in the batch
+	IntentsOps     IntentOpsBatch // subset of userOp intents out of Batch
+	UserOpsOrigIdx OrigBatchIdx   // map of userOp hash to its index in the original batch
+	OrigBatch      []*userop.UserOperation
 	InvalidIntents uint
 }
 
-func NewEntryPointIntents(entryPoint common.Address) *EntryPointIntents {
+func NewEntryPointIntents(entryPoint common.Address, origBatch []*userop.UserOperation) *EntryPointIntents {
 	return &EntryPointIntents{
-		EntryPoint: entryPoint,
-		Intents:    make(IntentsBatch),
-		IntentsOps: make(IntentOpsBatch),
+		EntryPoint:     entryPoint,
+		Intents:        make(IntentsBatch),
+		IntentsOps:     make(IntentOpsBatch),
+		UserOpsOrigIdx: make(OrigBatchIdx),
+		OrigBatch:      origBatch,
 	}
 }
 
@@ -78,7 +83,7 @@ func (i *Bundler) solveIntents(intentsBatch *EntryPointIntents) {
 		return
 	}
 
-	l := i.logger.WithName("solveIntents").V(1)
+	l := i.logger.WithName("solveIntents")
 	intents := make([]*intentsdt.Intent, len(intentsBatch.Intents))
 	j := 0
 	for _, itt := range intentsBatch.Intents {
@@ -99,9 +104,11 @@ func (i *Bundler) solveIntents(intentsBatch *EntryPointIntents) {
 	for _, intent := range intents {
 		switch intent.Status {
 		case intentsdt.Solved:
-			intentsBatch.Intents[intent.Hash].CallData = intent.CallData
+			// Set the solution back to the original userOp
+			intentsBatch.OrigBatch[intentsBatch.UserOpsOrigIdx[intent.Hash]].CallData = []byte(intent.CallData)
 			intentsBatch.IntentsOps[intent.Hash].CallData = []byte(intent.CallData)
 		case intentsdt.Unsolved:
+			// will be retried till expired
 			intentsBatch.Intents[intent.Hash].Status = intentsdt.Unsolved
 		case intentsdt.Expired, intentsdt.Invalid:
 			delete(intentsBatch.Intents, intent.Hash)
@@ -114,16 +121,14 @@ func (i *Bundler) solveIntents(intentsBatch *EntryPointIntents) {
 				"intent_status", intent.Status).
 				Error(fmt.Errorf("unknown intent status"), "unknown returned solver status")
 		}
-
-		// TODO: handle unsolved, invalid intents, log etc.
 	}
 }
 
 func (i *Bundler) identifyIntents(entryPoint common.Address, batch []*userop.UserOperation) *EntryPointIntents {
 	l := i.logger.WithName("identifyIntents").V(1)
-	intentsBatch := NewEntryPointIntents(entryPoint)
+	intentsBatch := NewEntryPointIntents(entryPoint, batch)
 
-	for _, userOp := range batch {
+	for idx, userOp := range batch {
 		opHash := userOp.GetUserOpHash(entryPoint, i.chainID).String()
 		var intent intentsdt.Intent
 		if userOp.IsIntent() {
@@ -141,7 +146,6 @@ func (i *Bundler) identifyIntents(entryPoint common.Address, batch []*userop.Use
 			}
 
 			// Save the identified intent
-			opHash := userOp.GetUserOpHash(entryPoint, i.chainID).String()
 			intentsBatch.IntentsOps[opHash] = userOp
 
 			// Set the intent hash to userOp's
@@ -150,6 +154,9 @@ func (i *Bundler) identifyIntents(entryPoint common.Address, batch []*userop.Use
 				intent.CreatedAt = time.Now().Unix()
 			}
 			intentsBatch.Intents[opHash] = &intent
+
+			// Save the index of the userOp in the original batch
+			intentsBatch.UserOpsOrigIdx[opHash] = idx
 		}
 	}
 	if len(intentsBatch.Intents) > 0 {
