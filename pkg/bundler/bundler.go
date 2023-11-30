@@ -135,24 +135,6 @@ func (i *Bundler) Process(ep common.Address) (*modules.BatchHandlerCtx, error) {
 		return nil, nil
 	}
 
-	intentsOps := make([]*userop.UserOperation, len(batch))
-	for _, userOp := range batch {
-		if userOp.IsIntent() {
-			l = l.
-				WithName("intents").
-				WithValues(
-					"userop_hash", userOp.GetUserOpHash(ep, i.chainID).String(),
-					"userop_nonce", userOp.Nonce,
-					"userop_sender", userOp.Sender.String(),
-					"is_intent", userOp.IsIntent,
-					"call_data", userOp.CallData)
-			intentsOps = append(intentsOps, userOp)
-		}
-	}
-	if len(intentsOps) > 0 {
-
-	}
-
 	batch = adjustBatchSize(i.maxBatch, batch)
 
 	// Get current block basefee

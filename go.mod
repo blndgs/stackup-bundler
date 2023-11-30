@@ -3,7 +3,7 @@ module github.com/stackup-wallet/stackup-bundler
 go 1.21.3
 
 require (
-	github.com/blndgs/intents v0.1.0
+	github.com/blndgs/intents v0.2.3
 	github.com/deckarep/golang-set/v2 v2.3.0
 	github.com/dgraph-io/badger/v3 v3.2103.5
 	github.com/ethereum/go-ethereum v1.13.5
