@@ -109,6 +109,16 @@ func (c *UserOpHandlerCtx) GetDepositInfo(entity common.Address) *entrypoint.ISt
 	return dep.(*entrypoint.IStakeManagerDepositInfo)
 }
 
+// GetDeposits retrieves deposits if any
+func (c *UserOpHandlerCtx) GetDeposits() (deps []*entrypoint.IStakeManagerDepositInfo) {
+    c.deposits.Range(func(key, value any) bool {
+        deps = append(deps, value.(*entrypoint.IStakeManagerDepositInfo))
+        return true
+    })
+
+    return deps
+}
+
 // GetPendingOps returns all pending UserOperations in the mempool by the same UserOp.Sender.
 func (c *UserOpHandlerCtx) GetPendingOps() []*userop.UserOperation {
 	return c.pendingOps
