@@ -8,14 +8,14 @@ import (
 	"net/http"
 	"time"
 
-	intentsdt "github.com/blndgs/intents"
+	"github.com/blndgs/model"
 	"github.com/ethereum/go-ethereum/common"
 
 	"github.com/stackup-wallet/stackup-bundler/pkg/userop"
 )
 
 type IntentOpsBatch map[string]*userop.UserOperation
-type IntentsBatch map[string]*intentsdt.Intent
+type IntentsBatch map[string]*model.Intent
 type OrigBatchIdx map[string]int
 
 type EntryPointIntents struct {
@@ -37,10 +37,9 @@ func NewEntryPointIntents(entryPoint common.Address, origBatch []*userop.UserOpe
 	}
 }
 
-func sendToSolver(solverClient *http.Client, solverURL string, senderAddress string, intents []*intentsdt.Intent) ([]*intentsdt.Intent, error) {
+func sendToSolver(solverClient *http.Client, solverURL string, senderAddress string, intents []*model.Intent) ([]*model.Intent, error) {
 	// Create a Body instance and populate it
-	body := intentsdt.Body{
-		Sender:  senderAddress, // Check if the sender address is needed
+	body := model.Body{
 		Intents: intents,
 	}
 
@@ -84,10 +83,10 @@ func (i *Bundler) solveIntents(intentsBatch *EntryPointIntents) {
 	}
 
 	l := i.logger.WithName("solveIntents")
-	intents := make([]*intentsdt.Intent, len(intentsBatch.Intents))
+	intents := make([]*model.Intent, len(intentsBatch.Intents))
 	j := 0
 	for _, itt := range intentsBatch.Intents {
-		itt.Status = intentsdt.SentToSolver
+		itt.Status = model.SentToSolver
 		intents[j] = itt
 		j++
 	}
@@ -103,13 +102,13 @@ func (i *Bundler) solveIntents(intentsBatch *EntryPointIntents) {
 
 	for _, intent := range intents {
 		switch intent.Status {
-		case intentsdt.Solved:
+		case model.Solved:
 			// Set the solution back to the original userOp
 			intentsBatch.OrigBatch[intentsBatch.UserOpsOrigIdx[intent.Hash]].CallData = []byte(intent.CallData)
-		case intentsdt.Unsolved:
+		case model.Unsolved:
 			// will be retried till expired
-			intentsBatch.Intents[intent.Hash].Status = intentsdt.Unsolved
-		case intentsdt.Expired, intentsdt.Invalid:
+			intentsBatch.Intents[intent.Hash].Status = model.Unsolved
+		case model.Expired, model.Invalid:
 			delete(intentsBatch.Intents, intent.Hash)
 			delete(intentsBatch.IntentsOps, intent.Hash)
 			l.WithValues("intent_hash", intent.Hash,
@@ -129,7 +128,7 @@ func (i *Bundler) identifyIntents(entryPoint common.Address, batch []*userop.Use
 
 	for idx, userOp := range batch {
 		opHash := userOp.GetUserOpHash(entryPoint, i.chainID).String()
-		var intent intentsdt.Intent
+		var intent model.Intent
 		if userOp.IsIntent() {
 			userOp.RemoveIntentPrefix()
 			if err := json.Unmarshal(userOp.CallData, &intent); err != nil {
