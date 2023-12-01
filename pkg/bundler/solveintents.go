@@ -157,9 +157,6 @@ func (i *Bundler) identifyIntents(entryPoint common.Address, batch []*userop.Use
 			intentsBatch.UserOpsOrigIdx[opHash] = idx
 		}
 	}
-	if len(intentsBatch.Intents) > 0 {
-		i.solveIntents(intentsBatch)
-	}
 
 	return intentsBatch
 }
