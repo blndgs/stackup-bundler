@@ -6,12 +6,15 @@ import (
 	"log"
 	"net/http"
 
-	badger "github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"go.opentelemetry.io/otel"
+
 	"github.com/stackup-wallet/stackup-bundler/internal/config"
 	"github.com/stackup-wallet/stackup-bundler/internal/logger"
 	"github.com/stackup-wallet/stackup-bundler/internal/o11y"
@@ -28,8 +31,6 @@ import (
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules/paymaster"
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules/relay"
 	"github.com/stackup-wallet/stackup-bundler/pkg/signer"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
-	"go.opentelemetry.io/otel"
 )
 
 func PrivateMode() {
@@ -128,7 +129,7 @@ func PrivateMode() {
 	paymaster := paymaster.New(db)
 
 	// Init Client
-	c := client.New(mem, ov, chain, conf.SupportedEntryPoints)
+	c := client.New(mem, ov, chain, conf.SupportedEntryPoints, conf.SolverUrl)
 	c.SetGetUserOpReceiptFunc(client.GetUserOpReceiptWithEthClient(eth))
 	c.SetGetGasEstimateFunc(
 		client.GetGasEstimateWithEthClient(rpc, ov, chain, conf.MaxBatchGasLimit),

@@ -4,10 +4,13 @@ package client
 import (
 	"errors"
 	"math/big"
+	"net/http"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/go-logr/logr"
+
 	"github.com/stackup-wallet/stackup-bundler/internal/logger"
 	"github.com/stackup-wallet/stackup-bundler/pkg/entrypoint/filter"
 	"github.com/stackup-wallet/stackup-bundler/pkg/gas"
@@ -29,6 +32,9 @@ type Client struct {
 	getUserOpReceipt     GetUserOpReceiptFunc
 	getGasEstimate       GetGasEstimateFunc
 	getUserOpByHash      GetUserOpByHashFunc
+	solverURL            string
+	solverClient         *http.Client
+	entryPointsIntents   EntryPointsIntents
 }
 
 // New initializes a new ERC-4337 client which can be extended with modules for validating UserOperations
@@ -38,7 +44,15 @@ func New(
 	ov *gas.Overhead,
 	chainID *big.Int,
 	supportedEntryPoints []common.Address,
+	solverURL string,
 ) *Client {
+	entryPointsIntents := make(map[common.Address]*EntryPointIntents)
+	for _, ep := range supportedEntryPoints {
+		if ep == common.HexToAddress("0x00") {
+			continue
+		}
+		entryPointsIntents[ep] = NewEntryPointIntent(ep, nil)
+	}
 	return &Client{
 		mempool:              mempool,
 		ov:                   ov,
@@ -49,6 +63,10 @@ func New(
 		getUserOpReceipt:     getUserOpReceiptNoop(),
 		getGasEstimate:       getGasEstimateNoop(),
 		getUserOpByHash:      getUserOpByHashNoop(),
+		solverURL:            solverURL,
+		// TODO: Make timeout value configurable
+		solverClient:       &http.Client{Timeout: 100 * time.Second},
+		entryPointsIntents: entryPointsIntents,
 	}
 }
 
@@ -121,6 +139,8 @@ func (i *Client) SendUserOperation(op map[string]any, ep string) (string, error)
 		l.Error(err, "eth_sendUserOperation error")
 		return "", err
 	}
+
+	i.processIntent(epAddr, userOp)
 
 	// Run through client module stack.
 	ctx := modules.NewUserOpHandlerContext(userOp, penOps, epAddr, i.chainID)

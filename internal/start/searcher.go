@@ -121,7 +121,7 @@ func SearcherMode() {
 	paymaster := paymaster.New(db)
 
 	// Init Client
-	c := client.New(mem, ov, chain, conf.SupportedEntryPoints)
+	c := client.New(mem, ov, chain, conf.SupportedEntryPoints, conf.SolverUrl)
 	c.SetGetUserOpReceiptFunc(client.GetUserOpReceiptWithEthClient(eth))
 	c.SetGetGasEstimateFunc(
 		client.GetGasEstimateWithEthClient(rpc, ov, chain, conf.MaxBatchGasLimit),
