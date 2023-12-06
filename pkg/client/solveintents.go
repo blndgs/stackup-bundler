@@ -20,7 +20,8 @@ type EntryPointIntents struct {
 	EntryPoint      common.Address
 	NewIntent       *model.Intent
 	NewIntentUserOp *userop.UserOperation // the userOp intent or nil
-	Unsolved        []*model.Intent
+	Unsolved        *Queue[*model.Intent]
+	Buffer          map[string]*userop.UserOperation // buffer for intent userOps to be sent to Solver
 	InvalidIntents  uint
 }
 
@@ -29,7 +30,8 @@ func NewEntryPointIntent(entryPoint common.Address, origOp *userop.UserOperation
 	return &EntryPointIntents{
 		EntryPoint:      entryPoint,
 		NewIntentUserOp: origOp,
-		Unsolved:        make([]*model.Intent, 0, unsolvedCap),
+		Unsolved:        NewQueue[*model.Intent](unsolvedCap),
+		Buffer:          make(map[string]*userop.UserOperation),
 	}
 }
 
@@ -88,36 +90,42 @@ func (i *Client) solveIntent(entrypointIntent *EntryPointIntents) {
 		Status: model.SentToSolver,
 	}
 
-	intentsToSend := make([]*model.Intent, len(entrypointIntent.Unsolved)+1)
-
 	// Add the new NewIntent first to solve
-	intentsToSend[0] = &intent
-	for u, unsolved := range entrypointIntent.Unsolved {
-		intentsToSend[u+1] = unsolved
-		intentsToSend[u+1].Status = model.SentToSolver
-	}
+	entrypointIntent.Unsolved.EnqueueHead(hash, &intent)
+	entrypointIntent.Unsolved.Range(func(index int, value *model.Intent) {
+		value.Status = model.SentToSolver
+	})
 
 	// TODO: Add Backoff logic
 	var err error
-	intents, err := sendToSolver(i.solverClient, i.solverURL, intentsToSend)
+	intents, err := sendToSolver(i.solverClient, i.solverURL, entrypointIntent.Unsolved.ToSlice())
 	if err != nil {
 		l.WithValues("number_intents", len(intents)).
 			Error(err, "failed to send intents to solver")
 	}
 
+	entrypointIntent.Unsolved.Reset(uint(len(intents)))
+
 	for _, intent := range intents {
+		if intent.ExpirationAt < time.Now().Unix() {
+			// expired, log & drop
+			l.WithValues("intent_hash", intent.Hash,
+				"intent_status", intent.Status).
+				Info("dropping expired intent")
+			continue
+		}
 		switch intent.Status {
 		case model.Solved:
 			// Set the solution back to the original userOp
-			entrypointIntent.NewIntentUserOp.CallData = []byte(intent.CallData)
+			entrypointIntent.Unsolved.EnqueueTail(intent.Hash, intent)
 		case model.Unsolved:
 			// will be retried till expired
-			entrypointIntent.NewIntent.Status = model.Unsolved
-			entrypointIntent.Unsolved = append(entrypointIntent.Unsolved, intent)
+			entrypointIntent.Unsolved.EnqueueHead(intent.Hash, intent)
 		default:
+			// invalid or expired
 			l.WithValues("intent_hash", intent.Hash,
 				"intent_status", intent.Status).
-				Error(fmt.Errorf("unknown intent status"), "unknown returned solver status")
+				Info("dropping intent")
 		}
 	}
 }
@@ -151,11 +159,19 @@ func (i *Client) identifyIntent(entrypointIntent *EntryPointIntents, userOp *use
 
 	// Save the identified intent
 	entrypointIntent.NewIntentUserOp = userOp
+	entrypointIntent.Buffer[opHash] = userOp
+	entrypointIntent.NewIntent = &intent
+	entrypointIntent.NewIntent.Hash = opHash
+	intent.Status = model.Received
+	entrypointIntent.Unsolved.EnqueueHead(opHash, &intent)
 
 	// Set the intent hash to userOp's
 	intent.Hash = opHash
 	if intent.CreatedAt == 0 {
 		intent.CreatedAt = time.Now().Unix()
+	}
+	if intent.ExpirationAt == 0 {
+		intent.ExpirationAt = time.Unix(intent.CreatedAt, 0).Add(time.Duration(100 * time.Second)).Unix()
 	}
 
 	return true
