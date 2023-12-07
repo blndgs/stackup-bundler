@@ -149,19 +149,21 @@ func (i *Client) SendUserOperation(op map[string]any, ep string) (string, error)
 		return "", err
 	}
 
-	i.processIntent(epAddr, userOp)
+	opHash := userOp.GetUserOpHash(epAddr, i.chainID).String()
 
-	if !userOp.HasIntent() {
-		return i.addToMemPool(epAddr, userOp)
+	if userOp.HasIntent() {
+		// route userOps with intent to the solver
+		go i.processUserOpIntent(epAddr, userOp, opHash)
+
+		return opHash, nil
 	}
 
-	return userOp.GetUserOpHash(epAddr, i.chainID).String(), nil
+	return i.addToMemPool(epAddr, userOp, opHash)
 }
 
-func (i *Client) addToMemPool(epAddr common.Address, userOp *userop.UserOperation) (string, error) {
+func (i *Client) addToMemPool(epAddr common.Address, userOp *userop.UserOperation, opHash string) (string, error) {
 	l := i.logger.WithName("addToMemPool")
 
-	opHash := userOp.GetUserOpHash(epAddr, i.chainID)
 	l = l.WithValues("userop_hash", opHash,
 		"userop_nonce", userOp.Nonce,
 		"userop_sender", userOp.Sender.String(),
@@ -189,7 +191,7 @@ func (i *Client) addToMemPool(epAddr common.Address, userOp *userop.UserOperatio
 
 	l.Info("addToMemPool ok")
 
-	return opHash.String(), nil
+	return opHash, nil
 }
 
 // EstimateUserOperationGas returns estimates for PreVerificationGas, VerificationGasLimit, and CallGasLimit

@@ -156,16 +156,17 @@ func (i *Client) identifyIntent(entrypointIntent *EntryPointIntents, userOp *use
 	return true
 }
 
-// processIntent solves intents from new received Intent userOps
-func (i *Client) processIntent(entrypoint common.Address, userOp *userop.UserOperation) {
-	l := i.logger.WithName("processIntent")
+// processUserOpIntent solves intents from new received Intent userOps
+func (i *Client) processUserOpIntent(entrypoint common.Address, userOp *userop.UserOperation, opHash string) {
+	l := i.logger.WithName("processUserOpIntent")
 
 	if userOp == nil {
-		l.Error(fmt.Errorf("userOp is nil"), "userOp is nil")
+		l.Error(fmt.Errorf("userOp is nil"), "userOp is nil in processUserOpIntent")
+		return
 	}
+
 	if !userOp.HasIntent() {
-		l.WithValues("userop_hash", userOp.GetUserOpHash(entrypoint, i.chainID).String(),
-			"userop_nonce", userOp.Nonce,
+		l.WithValues("userop_hash", opHash,
 			"userop_sender", userOp.Sender.String(),
 			"userop_call_data", string(userOp.CallData)).
 			Info("userOp is not an intent")
@@ -173,18 +174,20 @@ func (i *Client) processIntent(entrypoint common.Address, userOp *userop.UserOpe
 		return
 	}
 
+	i.identifyIntent(i.getEPIntentsBuffer(entrypoint), userOp)
+}
+
+func (i *Client) getEPIntentsBuffer(entrypoint common.Address) *EntryPointIntents {
 	if i.entryPointsIntents[entrypoint] == nil {
 		ep := NewEntryPointIntent(entrypoint)
 		i.entryPointsIntents[entrypoint] = ep
-		scheduledFunc := sendToSolver(i.logger, ep.Unsolved, i.solvedOps, ep, i.solverClient, i.solverURL)
 
 		// Start scheduling the sendToSolver function
+		scheduledFunc := sendToSolver(i.logger, ep.Unsolved, i.solvedOps, ep, i.solverClient, i.solverURL)
 		ep.Unsolved.SetTickerFunc(time.Second*1, scheduledFunc)
 	}
 
-	entrypointIntents := i.entryPointsIntents[entrypoint]
-
-	i.identifyIntent(entrypointIntents, userOp)
+	return i.entryPointsIntents[entrypoint]
 }
 
 // processIntentUserOps consumes solved Intent userOps
@@ -199,7 +202,7 @@ func (i *Client) processIntentUserOps(entrypoint common.Address) {
 
 			println("Adding to mempool the solved userOp: ", string(userOp.CallData))
 
-			hashOp, err := i.addToMemPool(entrypoint, userOp)
+			hashOp, err := i.addToMemPool(entrypoint, userOp, userOp.GetUserOpHash(entrypoint, i.chainID).String())
 			if err != nil {
 				l.WithValues("userop_hash", hashOp,
 					"userop_nonce", userOp.Nonce,
