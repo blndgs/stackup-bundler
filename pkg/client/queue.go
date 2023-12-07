@@ -2,20 +2,52 @@ package client
 
 import (
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 )
 
 type Queue[T any] struct {
-	items []T
-	keys  map[string]int
-	mu    sync.Mutex
+	items  []T
+	keys   map[string]int
+	ticker *time.Ticker
+	mu     sync.Mutex
 }
 
 func NewQueue[T any](capacity uint) *Queue[T] {
 	return &Queue[T]{
 		items: make([]T, 0, capacity),
 		keys:  make(map[string]int),
+	}
+}
+
+func (q *Queue[T]) SetTickerFunc(duration time.Duration, tickFunc func()) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	// Prevent multiple tickers from running simultaneously
+	// by stopping the previous ticker
+	if q.ticker != nil {
+		q.ticker.Stop()
+	}
+
+	if duration > 0 && tickFunc != nil {
+		q.ticker = time.NewTicker(duration)
+		go func() {
+			for range q.ticker.C {
+				tickFunc()
+			}
+		}()
+	}
+}
+
+func (q *Queue[T]) StopTicker() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	if q.ticker != nil {
+		q.ticker.Stop()
+		q.ticker = nil
 	}
 }
 
@@ -56,7 +88,7 @@ func (q *Queue[T]) EnqueueWithKey(key string, item T) {
 	q.keys[key] = len(q.items) - 1
 }
 
-func (q *Queue[T]) Reset(capacity uint) {
+func (q *Queue[T]) Reset(capacity int) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 

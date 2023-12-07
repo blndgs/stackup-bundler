@@ -3,12 +3,12 @@ package client
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
 	"github.com/blndgs/model"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/go-logr/logr"
 	"github.com/goccy/go-json"
 
 	"github.com/stackup-wallet/stackup-bundler/pkg/userop"
@@ -17,115 +17,93 @@ import (
 type EntryPointsIntents map[common.Address]*EntryPointIntents
 
 type EntryPointIntents struct {
-	EntryPoint      common.Address
-	NewIntent       *model.Intent
-	NewIntentUserOp *userop.UserOperation // the userOp intent or nil
-	Unsolved        *Queue[*model.Intent]
-	Buffer          map[string]*userop.UserOperation // buffer for intent userOps to be sent to Solver
-	InvalidIntents  uint
+	EntryPoint     common.Address
+	Unsolved       *Queue[*model.Intent]
+	Buffer         map[string]*userop.UserOperation // buffer for intent userOps to be sent to Solver
+	InvalidIntents uint
 }
 
-func NewEntryPointIntent(entryPoint common.Address, origOp *userop.UserOperation) *EntryPointIntents {
+func NewEntryPointIntent(entryPoint common.Address) *EntryPointIntents {
 	const unsolvedCap = 5
 	return &EntryPointIntents{
-		EntryPoint:      entryPoint,
-		NewIntentUserOp: origOp,
-		Unsolved:        NewQueue[*model.Intent](unsolvedCap),
-		Buffer:          make(map[string]*userop.UserOperation),
+		EntryPoint: entryPoint,
+		Unsolved:   NewQueue[*model.Intent](unsolvedCap),
+		Buffer:     make(map[string]*userop.UserOperation),
 	}
 }
 
-func sendToSolver(solverClient *http.Client, solverURL string, intents []*model.Intent) ([]*model.Intent, error) {
-	// Create a Body instance and populate it
-	body := model.Body{
-		Intents: intents,
-	}
+func sendToSolver(log logr.Logger, unsolvedQ *Queue[*model.Intent], solvedOps chan *userop.UserOperation,
+	epIntents *EntryPointIntents, solverClient *http.Client, solverURL string) func() {
+	return func() {
+		l := log.WithName("sendToSolver")
+		// Get the unsolved intents from the queue
+		intents := unsolvedQ.ToSlice()
 
-	// Marshal the Body instance into JSON
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a new HTTP POST request
-	req, err := http.NewRequest(http.MethodPost, solverURL, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		// Log error and return
-		log.Printf("Error creating request: %s", err.Error())
-		return nil, err
-	}
-
-	// Set the content type to application/json
-	req.Header.Set("Content-Type", "application/json")
-
-	// Send the request
-	resp, err := solverClient.Do(req)
-	if err != nil {
-		log.Printf("Error occurred sending request. Error: %s", err.Error())
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	// Decode the returned intents back into the same slice of intents
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		log.Printf("Error decoding response: %s", err.Error())
-		return nil, err
-	}
-
-	return body.Intents, nil
-}
-
-func (i *Client) solveIntent(entrypointIntent *EntryPointIntents) {
-	l := i.logger.WithName("solveIntents")
-	if entrypointIntent.NewIntentUserOp == nil {
-		l.Error(
-			fmt.Errorf("entryPointEntries or NewIntentUserOp is nil"),
-			"")
-	}
-
-	hash := entrypointIntent.NewIntentUserOp.GetUserOpHash(entrypointIntent.EntryPoint, i.chainID).String()
-
-	intent := model.Intent{
-		Hash:   hash,
-		Status: model.SentToSolver,
-	}
-
-	// Add the new NewIntent first to solve
-	entrypointIntent.Unsolved.EnqueueHead(hash, &intent)
-	entrypointIntent.Unsolved.Range(func(index int, value *model.Intent) {
-		value.Status = model.SentToSolver
-	})
-
-	// TODO: Add Backoff logic
-	var err error
-	intents, err := sendToSolver(i.solverClient, i.solverURL, entrypointIntent.Unsolved.ToSlice())
-	if err != nil {
-		l.WithValues("number_intents", len(intents)).
-			Error(err, "failed to send intents to solver")
-	}
-
-	entrypointIntent.Unsolved.Reset(uint(len(intents)))
-
-	for _, intent := range intents {
-		if intent.ExpirationAt < time.Now().Unix() {
-			// expired, log & drop
-			l.WithValues("intent_hash", intent.Hash,
-				"intent_status", intent.Status).
-				Info("dropping expired intent")
-			continue
+		// If there are no intents, return
+		if len(intents) == 0 {
+			return
 		}
-		switch intent.Status {
-		case model.Solved:
-			// Set the solution back to the original userOp
-			entrypointIntent.Unsolved.EnqueueTail(intent.Hash, intent)
-		case model.Unsolved:
-			// will be retried till expired
-			entrypointIntent.Unsolved.EnqueueHead(intent.Hash, intent)
-		default:
-			// invalid or expired
-			l.WithValues("intent_hash", intent.Hash,
-				"intent_status", intent.Status).
-				Info("dropping intent")
+
+		epIntents.Unsolved.Reset(len(intents))
+
+		// Rest of the sendToSolver logic
+		body := model.Body{
+			Intents: intents,
+		}
+		jsonBody, err := json.Marshal(body)
+		if err != nil {
+			l.WithValues("number_intents", len(intents)).
+				Error(err, "failed to marshal intents")
+			return
+		}
+
+		req, err := http.NewRequest(http.MethodPost, solverURL, bytes.NewBuffer(jsonBody))
+		if err != nil {
+			l.WithValues("number_intents", len(intents)).
+				Error(err, "failed to create request")
+			return
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := solverClient.Do(req)
+		if err != nil {
+			l.WithValues("number_intents", len(intents)).
+				Error(err, "failed to send request")
+			return
+		}
+		defer resp.Body.Close()
+
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			l.WithValues("number_intents", len(intents)).
+				Error(err, "failed to decode response")
+			return
+		}
+
+		for _, intent := range intents {
+			if intent.ExpirationAt < time.Now().Unix() {
+				// expired, log & drop
+				l.WithValues("intent_hash", intent.Hash,
+					"intent_status", intent.Status).
+					Info("dropping expired intent")
+				continue
+			}
+			switch intent.Status {
+			case model.Solved:
+				// Set the solution to be processed by the bundler client
+				solvedUserOp := epIntents.Buffer[intent.Hash]
+				solvedUserOp.CallData = []byte(intent.CallData)
+				solvedOps <- solvedUserOp
+				delete(epIntents.Buffer, intent.Hash)
+			case model.Unsolved:
+				// will be retried till expired
+				epIntents.Unsolved.EnqueueHead(intent.Hash, intent)
+			default:
+				// invalid or expired
+				l.WithValues("intent_hash", intent.Hash,
+					"intent_status", intent.Status).
+					Info("dropping intent")
+			}
 		}
 	}
 }
@@ -158,12 +136,9 @@ func (i *Client) identifyIntent(entrypointIntent *EntryPointIntents, userOp *use
 	}
 
 	// Save the identified intent
-	entrypointIntent.NewIntentUserOp = userOp
 	entrypointIntent.Buffer[opHash] = userOp
-	entrypointIntent.NewIntent = &intent
-	entrypointIntent.NewIntent.Hash = opHash
+	intent.Hash = opHash
 	intent.Status = model.Received
-	entrypointIntent.Unsolved.EnqueueHead(opHash, &intent)
 
 	// Set the intent hash to userOp's
 	intent.Hash = opHash
@@ -171,18 +146,25 @@ func (i *Client) identifyIntent(entrypointIntent *EntryPointIntents, userOp *use
 		intent.CreatedAt = time.Now().Unix()
 	}
 	if intent.ExpirationAt == 0 {
-		intent.ExpirationAt = time.Unix(intent.CreatedAt, 0).Add(time.Duration(100 * time.Second)).Unix()
+		// TODO: set intents expiration configurable
+		const ttl = time.Duration(100 * time.Second)
+		intent.ExpirationAt = time.Unix(intent.CreatedAt, 0).Add(ttl).Unix()
 	}
+
+	entrypointIntent.Unsolved.EnqueueHead(opHash, &intent)
 
 	return true
 }
 
+// processIntent solves intents from new received Intent userOps
 func (i *Client) processIntent(entrypoint common.Address, userOp *userop.UserOperation) {
+	l := i.logger.WithName("processIntent")
+
 	if userOp == nil {
-		i.logger.Error(fmt.Errorf("userOp is nil"), "userOp is nil")
+		l.Error(fmt.Errorf("userOp is nil"), "userOp is nil")
 	}
 	if !userOp.HasIntent() {
-		i.logger.WithValues("userop_hash", userOp.GetUserOpHash(entrypoint, i.chainID).String(),
+		l.WithValues("userop_hash", userOp.GetUserOpHash(entrypoint, i.chainID).String(),
 			"userop_nonce", userOp.Nonce,
 			"userop_sender", userOp.Sender.String(),
 			"userop_call_data", string(userOp.CallData)).
@@ -192,14 +174,40 @@ func (i *Client) processIntent(entrypoint common.Address, userOp *userop.UserOpe
 	}
 
 	if i.entryPointsIntents[entrypoint] == nil {
-		i.entryPointsIntents[entrypoint] = NewEntryPointIntent(entrypoint, userOp)
+		ep := NewEntryPointIntent(entrypoint)
+		i.entryPointsIntents[entrypoint] = ep
+		scheduledFunc := sendToSolver(i.logger, ep.Unsolved, i.solvedOps, ep, i.solverClient, i.solverURL)
 
-		// TODO: Add scheduling logic for unsolved intents
+		// Start scheduling the sendToSolver function
+		ep.Unsolved.SetTickerFunc(time.Second*1, scheduledFunc)
 	}
 
-	entrypointIntent := i.entryPointsIntents[entrypoint]
+	entrypointIntents := i.entryPointsIntents[entrypoint]
 
-	if i.identifyIntent(entrypointIntent, userOp) {
-		i.solveIntent(entrypointIntent)
+	i.identifyIntent(entrypointIntents, userOp)
+}
+
+// processIntentUserOps consumes solved Intent userOps
+func (i *Client) processIntentUserOps(entrypoint common.Address) {
+	l := i.logger.WithName("client.processIntentUserOps")
+
+	for userOp := range i.solvedOps {
+
+		println("A solved userOp: ", userOp, " popped")
+
+		go func(entrypoint common.Address, userOp *userop.UserOperation) {
+
+			println("Adding to mempool the solved userOp: ", string(userOp.CallData))
+
+			hashOp, err := i.addToMemPool(entrypoint, userOp)
+			if err != nil {
+				l.WithValues("userop_hash", hashOp,
+					"userop_nonce", userOp.Nonce,
+					"userop_sender", userOp.Sender.String(),
+					"userop_call_data", string(userOp.CallData),
+					"entrypoint", entrypoint.String()).
+					Error(err, "failed to add userOp to mempool")
+			}
+		}(entrypoint, userOp)
 	}
 }

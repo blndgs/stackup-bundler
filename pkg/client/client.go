@@ -37,6 +37,7 @@ type Client struct {
 	solverURL            string
 	solverClient         *http.Client
 	entryPointsIntents   EntryPointsIntents
+	solvedOps            chan *userop.UserOperation
 }
 
 // New initializes a new ERC-4337 client which can be extended with modules for validating UserOperations
@@ -48,14 +49,9 @@ func New(
 	supportedEntryPoints []common.Address,
 	solverURL string,
 ) *Client {
-	entryPointsIntents := make(map[common.Address]*EntryPointIntents)
-	for _, ep := range supportedEntryPoints {
-		if ep == common.HexToAddress("0x00") {
-			continue
-		}
-		entryPointsIntents[ep] = NewEntryPointIntent(ep, nil)
-	}
-	return &Client{
+	const userOpsBatchSize = 200
+
+	client := &Client{
 		mempool:              mempool,
 		ov:                   ov,
 		chainID:              chainID,
@@ -69,8 +65,20 @@ func New(
 		solverURL:            solverURL,
 		// TODO: Make timeout value configurable
 		solverClient:       &http.Client{Timeout: 100 * time.Second},
-		entryPointsIntents: entryPointsIntents,
+		entryPointsIntents: make(map[common.Address]*EntryPointIntents),
+		solvedOps:          make(chan *userop.UserOperation, userOpsBatchSize),
 	}
+
+	for _, ep := range supportedEntryPoints {
+		if ep == common.HexToAddress("0x00") {
+			continue
+		}
+
+		// Start Solved Intent userOps consumer
+		go client.processIntentUserOps(ep)
+	}
+
+	return client
 }
 
 func (i *Client) parseEntryPointAddress(ep string) (common.Address, error) {
@@ -140,33 +148,48 @@ func (i *Client) SendUserOperation(op map[string]any, ep string) (string, error)
 		l.Error(err, "eth_sendUserOperation error")
 		return "", err
 	}
-	hash := userOp.GetUserOpHash(epAddr, i.chainID)
-	l = l.WithValues("userop_hash", hash)
+
+	i.processIntent(epAddr, userOp)
+
+	if !userOp.HasIntent() {
+		return i.addToMemPool(epAddr, userOp)
+	}
+
+	return userOp.GetUserOpHash(epAddr, i.chainID).String(), nil
+}
+
+func (i *Client) addToMemPool(epAddr common.Address, userOp *userop.UserOperation) (string, error) {
+	l := i.logger.WithName("addToMemPool")
+
+	opHash := userOp.GetUserOpHash(epAddr, i.chainID)
+	l = l.WithValues("userop_hash", opHash,
+		"userop_nonce", userOp.Nonce,
+		"userop_sender", userOp.Sender.String(),
+		"userop_call_data", string(userOp.CallData))
 
 	// Fetch any pending UserOperations in the mempool by the same sender
 	penOps, err := i.mempool.GetOps(epAddr, userOp.Sender)
 	if err != nil {
-		l.Error(err, "eth_sendUserOperation error")
+		l.Error(err, "addToMemPool error")
 		return "", err
 	}
-
-	i.processIntent(epAddr, userOp)
 
 	// Run through client module stack.
 	ctx := modules.NewUserOpHandlerContext(userOp, penOps, epAddr, i.chainID)
 	if err := i.userOpHandler(ctx); err != nil {
-		l.Error(err, "eth_sendUserOperation error")
+		l.Error(err, "addToMemPool error")
 		return "", err
 	}
 
 	// Add userOp to mempool.
 	if err := i.mempool.AddOp(epAddr, ctx.UserOp); err != nil {
-		l.Error(err, "eth_sendUserOperation error")
+		l.Error(err, "addToMemPool error")
 		return "", err
 	}
 
-	l.Info("eth_sendUserOperation ok")
-	return hash.String(), nil
+	l.Info("addToMemPool ok")
+
+	return opHash.String(), nil
 }
 
 // EstimateUserOperationGas returns estimates for PreVerificationGas, VerificationGasLimit, and CallGasLimit

@@ -16,6 +16,28 @@ func TestQueueInitializationWithCapacity(t *testing.T) {
 	assert.Equal(t, 0, len(queue.ToSlice()), "Initial length of queue should be 0")
 }
 
+func TestQueueTickerFunc(t *testing.T) {
+	queue := NewQueue[int](10)
+
+	tickChannel := make(chan bool)
+	tickFunc := func() {
+		tickChannel <- true
+	}
+
+	// Set a short duration for the ticker to trigger quickly
+	queue.SetTickerFunc(100*time.Millisecond, tickFunc)
+
+	// Wait for the ticker function to be executed
+	select {
+	case <-tickChannel:
+		// Ticker function executed
+	case <-time.After(1 * time.Second):
+		t.Fatal("Ticker function was not executed within expected time")
+	}
+
+	queue.StopTicker()
+}
+
 func TestQueueFindIndexByKey(t *testing.T) {
 	queue := NewQueue[int](10)
 	queue.EnqueueWithKey("first", 1)
@@ -48,7 +70,7 @@ func TestQueueReset(t *testing.T) {
 	queue.EnqueueTail("key2", 2)
 
 	// Reset the queue with a different capacity
-	newCapacity := uint(5)
+	newCapacity := 5
 	queue.Reset(newCapacity)
 
 	// After reset, the size should be 0
