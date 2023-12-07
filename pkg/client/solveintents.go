@@ -108,7 +108,7 @@ func sendToSolver(log logr.Logger, unsolvedQ *Queue[*model.Intent], solvedOps ch
 	}
 }
 
-func (i *Client) identifyIntent(entrypointIntent *EntryPointIntents, userOp *userop.UserOperation) bool {
+func (i *Client) bufferUserOpIntent(entrypointIntent *EntryPointIntents, userOp *userop.UserOperation) bool {
 	l := i.logger.WithName("identifyIntents")
 	opHash := userOp.GetUserOpHash(entrypointIntent.EntryPoint, i.chainID).String()
 	if !userOp.HasIntent() {
@@ -174,7 +174,7 @@ func (i *Client) processUserOpIntent(entrypoint common.Address, userOp *userop.U
 		return
 	}
 
-	i.identifyIntent(i.getEPIntentsBuffer(entrypoint), userOp)
+	i.bufferUserOpIntent(i.getEPIntentsBuffer(entrypoint), userOp)
 }
 
 func (i *Client) getEPIntentsBuffer(entrypoint common.Address) *EntryPointIntents {
