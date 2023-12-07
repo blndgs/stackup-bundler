@@ -43,9 +43,9 @@ func main() {
 	nonce := big.NewInt(11)
 	// initCode := hex.EncodeToString([]byte{})
 	callData := `{"sender":"0x0A7199a96fdf0252E09F76545c1eF2be3692F46b","kind":"swap","hash":"","sellToken":"TokenA","buyToken":"TokenB","sellAmount":10,"buyAmount":5,"partiallyFillable":false,"status":"Received","createdAt":0,"expirationAt":0}`
-	callGasLimit := big.NewInt(12052)
+	callGasLimit := big.NewInt(15000) // error if below 12100
 	verificationGasLimit := big.NewInt(58592)
-	preVerificationGas := big.NewInt(48000)
+	preVerificationGas := big.NewInt(56000) // error if below 54560
 	maxFeePerGas := big.NewInt(0xac97bb286)
 	maxPriorityFeePerGas := big.NewInt(0xac97bb264)
 	// paymasterAndData := hex.EncodeToString([]byte{})
