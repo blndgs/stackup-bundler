@@ -32,10 +32,12 @@ func main() {
 		panic(fmt.Errorf("fatal error config file: %w", err))
 	}
 
-	s, err := signer.New(viper.GetString("erc4337_bundler_private_key"))
+	prvKeyHex := viper.GetString("erc4337_bundler_private_key")
+	s, err := signer.New(prvKeyHex)
 	if err != nil {
 		panic(fmt.Errorf("fatal signer error: %w", err))
 	}
+	fmt.Printf("Private key: %s\n", hexutil.Encode(crypto.FromECDSA(s.PrivateKey)))
 	fmt.Printf("Public key: %s\n", hexutil.Encode(crypto.FromECDSAPub(s.PublicKey))[4:])
 	fmt.Printf("Address: %s\n", s.Address)
 
@@ -45,13 +47,13 @@ func main() {
 	callData := `{"sender":"0x0A7199a96fdf0252E09F76545c1eF2be3692F46b","kind":"swap","hash":"","sellToken":"TokenA","buyToken":"TokenB","sellAmount":10,"buyAmount":5,"partiallyFillable":false,"status":"Received","createdAt":0,"expirationAt":0}`
 	callGasLimit := big.NewInt(15000) // error if below 12100
 	verificationGasLimit := big.NewInt(58592)
-	preVerificationGas := big.NewInt(56000) // error if below 54560
+	preVerificationGas := big.NewInt(60000)
 	maxFeePerGas := big.NewInt(0xac97bb286)
 	maxPriorityFeePerGas := big.NewInt(0xac97bb264)
 	// paymasterAndData := hex.EncodeToString([]byte{})
 
+	const entrypointAddr = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
 	// Placeholder for signature
-	// signature := hex.EncodeToString([]byte{})
 
 	userOp := userop.UserOperation{
 		Sender:               sender,
@@ -64,10 +66,19 @@ func main() {
 		MaxFeePerGas:         maxFeePerGas,
 		MaxPriorityFeePerGas: maxPriorityFeePerGas,
 		PaymasterAndData:     []byte{},
-		Signature:            []byte{},
 	}
 
-	const entrypointAddr = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
+	privateKey, err := crypto.HexToECDSA(prvKeyHex)
+	if err != nil {
+		panic(err)
+	}
+
+	// Sign the userOp
+	userOp.Signature, err = crypto.Sign(userOp.GetUserOpHash(common.HexToAddress(entrypointAddr), big.NewInt(80001)).Bytes(), privateKey)
+	if err != nil {
+		panic(err)
+	}
+
 	request := JsonRpcRequest{
 		Jsonrpc: "2.0",
 		Id:      3,
