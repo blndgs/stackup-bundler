@@ -4,8 +4,6 @@ package client
 import (
 	"errors"
 	"math/big"
-	"net/http"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -34,10 +32,6 @@ type Client struct {
 	getGasPrices         GetGasPricesFunc
 	getGasEstimate       GetGasEstimateFunc
 	getUserOpByHash      GetUserOpByHashFunc
-	solverURL            string
-	solverClient         *http.Client
-	entryPointsIntents   EntryPointsIntents
-	solvedOps            chan *userop.UserOperation
 }
 
 // New initializes a new ERC-4337 client which can be extended with modules for validating UserOperations
@@ -49,8 +43,6 @@ func New(
 	supportedEntryPoints []common.Address,
 	solverURL string,
 ) *Client {
-	const userOpsBatchSize = 200
-
 	client := &Client{
 		mempool:              mempool,
 		ov:                   ov,
@@ -62,20 +54,6 @@ func New(
 		getGasPrices:         getGasPricesNoop(),
 		getGasEstimate:       getGasEstimateNoop(),
 		getUserOpByHash:      getUserOpByHashNoop(),
-		solverURL:            solverURL,
-		// TODO: Make timeout value configurable
-		solverClient:       &http.Client{Timeout: 100 * time.Second},
-		entryPointsIntents: make(map[common.Address]*EntryPointIntents),
-		solvedOps:          make(chan *userop.UserOperation, userOpsBatchSize),
-	}
-
-	for _, ep := range supportedEntryPoints {
-		if ep == common.HexToAddress("0x00") {
-			continue
-		}
-
-		// Start Solved Intent userOps consumer
-		go client.processIntentUserOps(ep)
 	}
 
 	return client
@@ -150,13 +128,6 @@ func (i *Client) SendUserOperation(op map[string]any, ep string) (string, error)
 	}
 
 	opHash := userOp.GetUserOpHash(epAddr, i.chainID).String()
-
-	if userOp.HasIntent() {
-		// route userOps with intent to the solver
-		go i.processUserOpIntent(epAddr, userOp, opHash)
-
-		return opHash, nil
-	}
 
 	return i.addToMemPool(epAddr, userOp, opHash)
 }
