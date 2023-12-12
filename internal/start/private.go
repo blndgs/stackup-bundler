@@ -30,6 +30,7 @@ import (
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules/gasprice"
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules/paymaster"
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules/relay"
+	"github.com/stackup-wallet/stackup-bundler/pkg/modules/solution"
 	"github.com/stackup-wallet/stackup-bundler/pkg/signer"
 )
 
@@ -124,6 +125,8 @@ func PrivateMode() {
 
 	exp := expire.New(conf.MaxOpTTL)
 
+	solver := solution.New(conf.SolverUrl)
+
 	relayer := relay.New(eoa, eth, chain, beneficiary, logr)
 
 	paymaster := paymaster.New(db)
@@ -161,6 +164,7 @@ func PrivateMode() {
 		batch.MaintainGasLimit(conf.MaxBatchGasLimit),
 		check.CodeHashes(),
 		check.PaymasterDeposit(),
+		solver.SolveIntents(),
 		relayer.SendUserOperation(),
 		paymaster.IncOpsIncluded(),
 		check.Clean(),
