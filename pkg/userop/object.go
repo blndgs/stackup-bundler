@@ -4,7 +4,6 @@ package userop
 import (
 	"encoding/json"
 	"math/big"
-	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -38,8 +37,6 @@ var (
 	// UserOpArr is the ABI type for an array of UserOperations.
 	UserOpArr, _ = abi.NewType("tuple[]", "ops", UserOpPrimitives)
 )
-
-const IntentCallDataPrefix = "<intent>"
 
 // UserOperation represents an EIP-4337 style transaction for a smart contract account.
 type UserOperation struct {
@@ -88,27 +85,6 @@ func (op *UserOperation) GetMaxGasAvailable() *big.Int {
 		big.NewInt(0).Mul(op.VerificationGasLimit, mul),
 		big.NewInt(0).Add(op.PreVerificationGas, op.CallGasLimit),
 	)
-}
-
-// IsIntent returns true if the UserOperation is an intent.
-func (op *UserOperation) IsIntent() bool {
-	// TODO remove next line when integration is complete
-	if !strings.HasPrefix(string(op.CallData), IntentCallDataPrefix) {
-		op.CallData = []byte("<intent>" + `{"sender":"0x0A7199a96fdf0252E09F76545c1eF2be3692F46b","kind":"swap","hash":"","sellToken":"TokenA","buyToken":"TokenB","sellAmount":10,"buyAmount":5,"partiallyFillable":false,"status":"Received","createdAt":0,"expirationAt":0}`)
-	}
-
-	if len(op.CallData) < len(IntentCallDataPrefix) {
-		return false
-	}
-
-	return string(op.CallData[:len(IntentCallDataPrefix)]) == IntentCallDataPrefix
-}
-
-// RemoveIntentPrefix returns the calldata without the intent prefix.
-func (op *UserOperation) RemoveIntentPrefix() {
-	if op.IsIntent() {
-		op.CallData = op.CallData[len(IntentCallDataPrefix):]
-	}
 }
 
 // GetMaxPrefund returns the max amount of wei required to pay for gas fees by either the sender or
