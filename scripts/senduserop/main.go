@@ -48,27 +48,27 @@ func main() {
 	verifySignedMessage(s.PrivateKey)
 
 	sender := common.HexToAddress("0x3068c2408c01bECde4BcCB9f246b56651BE1d12D")
-	nonce := big.NewInt(11)
+	nonce := big.NewInt(0x10)
 	// initCode := hex.EncodeToString([]byte{})
 	callData := `{"sender":"0x0A7199a96fdf0252E09F76545c1eF2be3692F46b","kind":"swap","hash":"","sellToken":"TokenA","buyToken":"TokenB","sellAmount":10,"buyAmount":5,"partiallyFillable":false,"status":"Received","createdAt":0,"expirationAt":0}`
 	cdHex := hexutil.Encode([]byte(callData))
 
 	println(callData, cdHex)
 
-	callGasLimit := big.NewInt(15000) // error if below 12100
-	verificationGasLimit := big.NewInt(58592)
-	preVerificationGas := big.NewInt(60000)
-	maxFeePerGas := big.NewInt(0xac97bb286)
-	maxPriorityFeePerGas := big.NewInt(0xac97bb264)
+	callGasLimit := big.NewInt(0x2f44) // error if below 12100
+	verificationGasLimit := big.NewInt(0xe4e0)
+	preVerificationGas := big.NewInt(0xbb7c)
+	maxFeePerGas := big.NewInt(0x12183576da)
+	maxPriorityFeePerGas := big.NewInt(0x12183576ba)
 	// paymasterAndData := hex.EncodeToString([]byte{})
 
 	// Placeholder for signature
 
-	userOp := userop.UserOperation{
+	userOp := &userop.UserOperation{
 		Sender:               sender,
 		Nonce:                nonce,
 		InitCode:             []byte{},
-		CallData:             []byte(hexutil.Encode([]byte{})), // []byte(callData),
+		CallData:             []byte{}, // []byte(callData),
 		CallGasLimit:         callGasLimit,
 		VerificationGasLimit: verificationGasLimit,
 		PreVerificationGas:   preVerificationGas,
@@ -83,18 +83,24 @@ func main() {
 	}
 
 	// signature := getVerifiedSignature(&userOp, privateKey)
-	userOp.Signature = getVerifiedSignature(&userOp, privateKey)
+	userOp.Signature = getVerifiedSignature(userOp, privateKey)
 
 	// Verify the signature
-	if verifySignature(&userOp, &privateKey.PublicKey) {
+	if verifySignature(userOp, &privateKey.PublicKey) {
 		println("Signature is valid")
 	} else {
 		println("Signature is invalid")
 	}
 
+	jsonStr, err := userOp.MarshalJSON()
+	if err != nil {
+		panic(err)
+	}
+	println(string(jsonStr))
+
 	request := JsonRpcRequest{
 		Jsonrpc: "2.0",
-		Id:      3,
+		Id:      45,
 		Method:  "eth_sendUserOperation",
 		Params:  []interface{}{userOp, entrypointAddr},
 	}
@@ -103,6 +109,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	println(string(requestBytes))
 
 	resp, err := http.Post("http://localhost:4337", "application/json", bytes.NewBuffer(requestBytes))
 	if err != nil {
