@@ -8,7 +8,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/go-logr/logr"
-
 	"github.com/stackup-wallet/stackup-bundler/internal/logger"
 	"github.com/stackup-wallet/stackup-bundler/pkg/entrypoint/filter"
 	"github.com/stackup-wallet/stackup-bundler/pkg/gas"
@@ -41,9 +40,8 @@ func New(
 	ov *gas.Overhead,
 	chainID *big.Int,
 	supportedEntryPoints []common.Address,
-	solverURL string,
 ) *Client {
-	client := &Client{
+	return &Client{
 		mempool:              mempool,
 		ov:                   ov,
 		chainID:              chainID,
@@ -55,8 +53,6 @@ func New(
 		getGasEstimate:       getGasEstimateNoop(),
 		getUserOpByHash:      getUserOpByHashNoop(),
 	}
-
-	return client
 }
 
 func (i *Client) parseEntryPointAddress(ep string) (common.Address, error) {
@@ -126,43 +122,31 @@ func (i *Client) SendUserOperation(op map[string]any, ep string) (string, error)
 		l.Error(err, "eth_sendUserOperation error")
 		return "", err
 	}
-
-	opHash := userOp.GetUserOpHash(epAddr, i.chainID).String()
-
-	return i.addToMemPool(epAddr, userOp, opHash)
-}
-
-func (i *Client) addToMemPool(epAddr common.Address, userOp *userop.UserOperation, opHash string) (string, error) {
-	l := i.logger.WithName("addToMemPool")
-
-	l = l.WithValues("userop_hash", opHash,
-		"userop_nonce", userOp.Nonce,
-		"userop_sender", userOp.Sender.String(),
-		"userop_call_data", string(userOp.CallData))
+	hash := userOp.GetUserOpHash(epAddr, i.chainID)
+	l = l.WithValues("userop_hash", hash)
 
 	// Fetch any pending UserOperations in the mempool by the same sender
 	penOps, err := i.mempool.GetOps(epAddr, userOp.Sender)
 	if err != nil {
-		l.Error(err, "addToMemPool error")
+		l.Error(err, "eth_sendUserOperation error")
 		return "", err
 	}
 
 	// Run through client module stack.
 	ctx := modules.NewUserOpHandlerContext(userOp, penOps, epAddr, i.chainID)
 	if err := i.userOpHandler(ctx); err != nil {
-		l.Error(err, "addToMemPool error")
+		l.Error(err, "eth_sendUserOperation error")
 		return "", err
 	}
 
 	// Add userOp to mempool.
 	if err := i.mempool.AddOp(epAddr, ctx.UserOp); err != nil {
-		l.Error(err, "addToMemPool error")
+		l.Error(err, "eth_sendUserOperation error")
 		return "", err
 	}
 
-	l.Info("addToMemPool ok")
-
-	return opHash, nil
+	l.Info("eth_sendUserOperation ok")
+	return hash.String(), nil
 }
 
 // EstimateUserOperationGas returns estimates for PreVerificationGas, VerificationGasLimit, and CallGasLimit

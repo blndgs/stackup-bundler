@@ -132,7 +132,7 @@ func PrivateMode() {
 	paymaster := paymaster.New(db)
 
 	// Init Client
-	c := client.New(mem, ov, chain, conf.SupportedEntryPoints, conf.SolverUrl)
+	c := client.New(mem, ov, chain, conf.SupportedEntryPoints)
 	c.SetGetUserOpReceiptFunc(client.GetUserOpReceiptWithEthClient(eth))
 	c.SetGetGasPricesFunc(client.GetGasPricesWithEthClient(eth))
 	c.SetGetGasEstimateFunc(
