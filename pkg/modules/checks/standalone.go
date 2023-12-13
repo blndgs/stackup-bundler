@@ -83,6 +83,10 @@ func (s *Standalone) ValidateOpValues() modules.UserOpHandlerFunc {
 // SimulateOp returns a UserOpHandler that runs through simulation of new UserOps with the EntryPoint.
 func (s *Standalone) SimulateOp() modules.UserOpHandlerFunc {
 	return func(ctx *modules.UserOpHandlerCtx) error {
+		if ctx.UserOp.HasIntent() {
+			// skip simulation for intents
+			return nil
+		}
 		gc := getCodeWithEthClient(s.eth)
 		g := new(errgroup.Group)
 		g.Go(func() error {
@@ -145,6 +149,12 @@ func (s *Standalone) CodeHashes() modules.BatchHandlerFunc {
 		end := len(ctx.Batch) - 1
 		for i := end; i >= 0; i-- {
 			op := ctx.Batch[i]
+
+			if op.HasIntent() {
+				// skip codehash check for intents
+				continue
+			}
+
 			chs, err := getSavedCodeHashes(s.db, op.GetUserOpHash(ctx.EntryPoint, ctx.ChainID))
 			if err != nil {
 				return err
@@ -173,6 +183,12 @@ func (s *Standalone) PaymasterDeposit() modules.BatchHandlerFunc {
 
 		deps := make(map[common.Address]*big.Int)
 		for i, op := range ctx.Batch {
+
+			if op.HasIntent() {
+				// paymaster deposit is not used for intents
+				continue
+			}
+
 			pm := op.GetPaymaster()
 			if pm == common.HexToAddress("0x") {
 				continue

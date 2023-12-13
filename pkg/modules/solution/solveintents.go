@@ -30,6 +30,7 @@ func New(solverURL string) *EntryPointIntents {
 	return &EntryPointIntents{
 		SolverURL:    solverURL,
 		SolverClient: &http.Client{Timeout: httpClientTimeout},
+		Buffer:       make(map[string]int),
 	}
 }
 
@@ -99,6 +100,17 @@ func (ei *EntryPointIntents) SolveIntents() modules.BatchHandlerFunc {
 				ctx.MarkOpIndexForRemoval(batchIndex)
 
 				// Remove the userOp from the buffer
+				delete(ei.Buffer, body.UserOpsExt[idx].OriginalHashValue)
+			}
+			switch opExt.ProcessingStatus {
+			case model.Expired, model.Invalid:
+				// dropping further processing of the userOp
+				batchIndex := ei.Buffer[body.UserOpsExt[idx].OriginalHashValue]
+				ctx.MarkOpIndexForRemoval(batchIndex)
+				delete(ei.Buffer, body.UserOpsExt[idx].OriginalHashValue)
+			case model.Solved:
+				// Remove the Solved userOp from the Solver buffer
+				// Remain in the mempool until the userOp is sent on chain
 				delete(ei.Buffer, body.UserOpsExt[idx].OriginalHashValue)
 			}
 		}

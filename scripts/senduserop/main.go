@@ -72,7 +72,7 @@ func main() {
 		Sender:               sender,
 		Nonce:                nonce,
 		InitCode:             []byte{},
-		CallData:             []byte{}, // []byte(callData),
+		CallData:             []byte(callData),
 		CallGasLimit:         callGasLimit,
 		VerificationGasLimit: verificationGasLimit,
 		PreVerificationGas:   preVerificationGas,

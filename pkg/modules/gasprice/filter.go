@@ -4,6 +4,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules"
 	"github.com/stackup-wallet/stackup-bundler/pkg/userop"
 )
@@ -14,6 +15,13 @@ func FilterUnderpriced() modules.BatchHandlerFunc {
 	return func(ctx *modules.BatchHandlerCtx) error {
 		b := []*userop.UserOperation{}
 		for _, op := range ctx.Batch {
+
+			if op.HasIntent() {
+				// Include all intents before solution regardless of gas price
+				b = append(b, op)
+				continue
+			}
+
 			if ctx.BaseFee != nil && ctx.BaseFee.Cmp(common.Big0) != 0 && ctx.Tip != nil {
 				gp := big.NewInt(0).Add(ctx.BaseFee, ctx.Tip)
 				if op.GetDynamicGasPrice(ctx.BaseFee).Cmp(gp) >= 0 {
