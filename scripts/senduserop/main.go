@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/ecdsa"
 	"fmt"
 	"log"
@@ -11,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/goccy/go-json"
 	"github.com/spf13/viper"
 
@@ -36,6 +38,7 @@ func main() {
 		panic(fmt.Errorf("fatal error config file: %w", err))
 	}
 
+	nodeURL := viper.GetString("ERC4337_BUNDLER_ETH_CLIENT_URL")
 	prvKeyHex := viper.GetString("erc4337_bundler_private_key")
 	s, err := signer.New(prvKeyHex)
 	if err != nil {
@@ -48,8 +51,12 @@ func main() {
 	verifySignedMessage(s.PrivateKey)
 
 	sender := common.HexToAddress("0x3068c2408c01bECde4BcCB9f246b56651BE1d12D")
-	nonce := big.NewInt(0x10)
-	// initCode := hex.EncodeToString([]byte{})
+
+	nonce, chainID, err := getNext(nodeURL, s.Address)
+	if err != nil {
+		panic(err)
+	}
+
 	callData := `{"sender":"0x0A7199a96fdf0252E09F76545c1eF2be3692F46b","kind":"swap","hash":"","sellToken":"TokenA","buyToken":"TokenB","sellAmount":10,"buyAmount":5,"partiallyFillable":false,"status":"Received","createdAt":0,"expirationAt":0}`
 	cdHex := hexutil.Encode([]byte(callData))
 
@@ -60,9 +67,6 @@ func main() {
 	preVerificationGas := big.NewInt(0xbb7c)
 	maxFeePerGas := big.NewInt(0x12183576da)
 	maxPriorityFeePerGas := big.NewInt(0x12183576ba)
-	// paymasterAndData := hex.EncodeToString([]byte{})
-
-	// Placeholder for signature
 
 	userOp := &userop.UserOperation{
 		Sender:               sender,
@@ -83,10 +87,10 @@ func main() {
 	}
 
 	// signature := getVerifiedSignature(&userOp, privateKey)
-	userOp.Signature = getVerifiedSignature(userOp, privateKey)
+	userOp.Signature = getVerifiedSignature(userOp, privateKey, chainID)
 
 	// Verify the signature
-	if verifySignature(userOp, &privateKey.PublicKey) {
+	if verifySignature(userOp, &privateKey.PublicKey, chainID) {
 		println("Signature is valid")
 	} else {
 		println("Signature is invalid")
@@ -127,8 +131,8 @@ func main() {
 	println("Response from server:", result)
 }
 
-func getVerifiedSignature(userOp *userop.UserOperation, privateKey *ecdsa.PrivateKey) []byte {
-	userOpHash := userOp.GetUserOpHash(common.HexToAddress(entrypointAddr), big.NewInt(80001)).Bytes()
+func getVerifiedSignature(userOp *userop.UserOperation, privateKey *ecdsa.PrivateKey, chainID *big.Int) []byte {
+	userOpHash := userOp.GetUserOpHash(common.HexToAddress(entrypointAddr), chainID).Bytes()
 
 	prefixedHash := crypto.Keccak256Hash(
 		[]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(userOpHash), userOpHash)),
@@ -150,8 +154,8 @@ func getVerifiedSignature(userOp *userop.UserOperation, privateKey *ecdsa.Privat
 	return signature
 }
 
-func verifySignature(userOp *userop.UserOperation, publicKey *ecdsa.PublicKey) bool {
-	userOpHash := userOp.GetUserOpHash(common.HexToAddress(entrypointAddr), big.NewInt(80001)).Bytes()
+func verifySignature(userOp *userop.UserOperation, publicKey *ecdsa.PublicKey, chainID *big.Int) bool {
+	userOpHash := userOp.GetUserOpHash(common.HexToAddress(entrypointAddr), chainID).Bytes()
 
 	prefixedHash := crypto.Keccak256Hash(
 		[]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(userOpHash), userOpHash)),
@@ -213,4 +217,31 @@ func verifySignedMessage(privateKey *ecdsa.PrivateKey /*publicKey *ecdsa.PublicK
 	} else {
 		fmt.Println("Invalid signature, recovered address does not match")
 	}
+}
+
+func getNext(nodeURL string, address common.Address) (nonce *big.Int, chainID *big.Int, err error) {
+	// Initialize a client instance to interact with the Ethereum network
+	client, err := ethclient.Dial(nodeURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to the Ethereum client: %v", err)
+	}
+	defer client.Close()
+
+	// Retrieve the next nonce to be used
+	nonceInt, err := client.PendingNonceAt(context.Background(), address)
+	if err != nil {
+		log.Fatalf("Failed to retrieve the nonce: %v", err)
+	}
+	fmt.Printf("Next nonce for address %s: %d\n", address.Hex(), nonce)
+
+	nonce = big.NewInt(int64(nonceInt))
+
+	// Retrieve the chain ID
+	chainID, err = client.NetworkID(context.Background())
+	if err != nil {
+		log.Fatalf("Failed to retrieve the chain ID: %v", err)
+	}
+	fmt.Println("Chain ID:", chainID)
+
+	return nonce, chainID, nil
 }
