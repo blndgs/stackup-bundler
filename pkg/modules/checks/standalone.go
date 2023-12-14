@@ -68,8 +68,16 @@ func (s *Standalone) ValidateOpValues() modules.UserOpHandlerFunc {
 		g.Go(func() error { return ValidateInitCode(ctx.UserOp, gs) })
 		g.Go(func() error { return ValidateVerificationGas(ctx.UserOp, s.ov, s.maxVerificationGas) })
 		g.Go(func() error { return ValidatePaymasterAndData(ctx.UserOp, gc, gs) })
-		g.Go(func() error { return ValidateCallGasLimit(ctx.UserOp, s.ov) })
-		g.Go(func() error { return ValidateFeePerGas(ctx.UserOp, gbf) })
+
+		if !ctx.UserOp.HasIntent() {
+			// skip gas limit validation for intents
+			g.Go(func() error { return ValidateCallGasLimit(ctx.UserOp, s.ov) })
+		}
+
+		if !ctx.UserOp.HasIntent() {
+			g.Go(func() error { return ValidateFeePerGas(ctx.UserOp, gbf) })
+		}
+
 		g.Go(func() error { return ValidatePendingOps(ctx.UserOp, penOps, s.maxOpsForUnstakedSender, gs) })
 		g.Go(func() error { return ValidateGasAvailable(ctx.UserOp, s.maxBatchGasLimit) })
 

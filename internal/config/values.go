@@ -94,7 +94,7 @@ func GetValues() *Values {
 	viper.SetDefault("erc4337_bundler_otel_insecure_mode", false)
 	viper.SetDefault("erc4337_bundler_debug_mode", false)
 	viper.SetDefault("erc4337_bundler_gin_mode", gin.ReleaseMode)
-	viper.SetDefault("solver_url", "http://localhost:7322/solvegas")
+	viper.SetDefault("solver_url", "http://localhost:7322/solve")
 
 	// Read in from .env file if available
 	viper.SetConfigName(".env")

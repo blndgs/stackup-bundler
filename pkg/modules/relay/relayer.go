@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/blndgs/model"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/go-logr/logr"
@@ -78,19 +79,8 @@ func (r *Relayer) SendUserOperation() modules.BatchHandlerFunc {
 
 		// Only proceed if there are conventional UserOperations to process
 		if len(nonIntentsBatch) > 0 {
-			opts := transaction.Opts{
-				EOA:         r.eoa,
-				Eth:         r.eth,
-				ChainID:     ctx.ChainID,
-				EntryPoint:  ctx.EntryPoint,
-				Batch:       nonIntentsBatch,
-				Beneficiary: r.beneficiary,
-				BaseFee:     ctx.BaseFee,
-				Tip:         ctx.Tip,
-				GasPrice:    ctx.GasPrice,
-				GasLimit:    0,
-				WaitTimeout: r.waitTimeout,
-			}
+			opts := r.getCallOptions(ctx, nonIntentsBatch)
+
 			// Estimate gas for handleOps() and drop all userOps that cause unexpected reverts.
 			estRev := []string{}
 			for len(nonIntentsBatch) > 0 {
@@ -110,40 +100,57 @@ func (r *Relayer) SendUserOperation() modules.BatchHandlerFunc {
 
 			// Call handleOps() with gas estimate. Any userOps that cause a revert at this stage will be
 			// caught and dropped in the next iteration.
-			if len(nonIntentsBatch) > 0 {
-				if txn, err := transaction.HandleOps(&opts); err != nil {
-					return err
-				} else {
-					ctx.Data["txn_hash"] = txn.Hash().String()
-				}
+			if err := handleOps(ctx, opts); err != nil {
+				return err
 			}
 
 			return nil
-		}
-		// end of sending conventional userOps
+		} // end of sending conventional userOps
 
 		if len(intentsBatch) > 0 {
-			opts := transaction.Opts{
-				EOA:         r.eoa,
-				Eth:         r.eth,
-				ChainID:     ctx.ChainID,
-				EntryPoint:  ctx.EntryPoint,
-				Batch:       intentsBatch,
-				Beneficiary: r.beneficiary,
-				BaseFee:     ctx.BaseFee,
-				Tip:         ctx.Tip,
-				GasPrice:    ctx.GasPrice,
-				GasLimit:    0,
-				WaitTimeout: r.waitTimeout,
+			opts := r.getCallOptions(ctx, intentsBatch)
+			println()
+			for _, op := range intentsBatch {
+				// cast to print it
+				operation := model.UserOperation(*op)
+				println(operation.String())
 			}
+			println()
+			println("--> handleOps")
 
-			if txn, err := transaction.HandleOps(&opts); err != nil {
-				return err
-			} else {
-				ctx.Data["txn_hash"] = txn.Hash().String()
+			if err := handleOps(ctx, opts); err != nil {
+				// swallow error
+				println(err.Error())
 			}
 		}
 
 		return nil
 	}
+}
+
+func handleOps(ctx *modules.BatchHandlerCtx, opts transaction.Opts) error {
+	if txn, err := transaction.HandleOps(&opts); err != nil {
+		return err
+	} else {
+		ctx.Data["txn_hash"] = txn.Hash().String()
+	}
+
+	return nil
+}
+
+func (r *Relayer) getCallOptions(ctx *modules.BatchHandlerCtx, intentsBatch []*userop.UserOperation) transaction.Opts {
+	opts := transaction.Opts{
+		EOA:         r.eoa,
+		Eth:         r.eth,
+		ChainID:     ctx.ChainID,
+		EntryPoint:  ctx.EntryPoint,
+		Batch:       intentsBatch,
+		Beneficiary: r.beneficiary,
+		BaseFee:     ctx.BaseFee,
+		Tip:         ctx.Tip,
+		GasPrice:    ctx.GasPrice,
+		GasLimit:    0,
+		WaitTimeout: r.waitTimeout,
+	}
+	return opts
 }
