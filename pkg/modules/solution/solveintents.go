@@ -39,7 +39,7 @@ type batchOpIndex int
 // batchIntentIndices buffers the mapping of the UserOperation hash value -> the index of the UserOperation in the batch
 type batchIntentIndices map[opHashID]batchOpIndex
 
-type EntryPointIntents struct {
+type IntentsHandler struct {
 	SolverURL    string
 	SolverClient *http.Client
 }
@@ -47,10 +47,10 @@ type EntryPointIntents struct {
 // Verify structural congruence
 var _ = model.UserOperation(userop.UserOperation{})
 
-func New(solverURL string) *EntryPointIntents {
+func New(solverURL string) *IntentsHandler {
 	const httpClientTimeout = 100 * time.Second
 
-	return &EntryPointIntents{
+	return &IntentsHandler{
 		SolverURL:    solverURL,
 		SolverClient: &http.Client{Timeout: httpClientTimeout},
 	}
@@ -58,7 +58,7 @@ func New(solverURL string) *EntryPointIntents {
 
 // bufferIntentOps caches the index of the userOp in the received batch and creates the UserOperationExt slice for the
 // Solver with cached Hashes and ProcessingStatus set to `Received`.
-func (ei *EntryPointIntents) bufferIntentOps(entrypoint common.Address, chainID *big.Int, batchIndices batchIntentIndices, userOpBatch []*model.UserOperation) model.BodyOfUserOps {
+func (ei *IntentsHandler) bufferIntentOps(entrypoint common.Address, chainID *big.Int, batchIndices batchIntentIndices, userOpBatch []*model.UserOperation) model.BodyOfUserOps {
 	body := model.BodyOfUserOps{
 		UserOps:    make([]*model.UserOperation, 0, len(userOpBatch)),
 		UserOpsExt: make([]model.UserOperationExt, 0, len(userOpBatch)),
@@ -87,7 +87,7 @@ func (ei *EntryPointIntents) bufferIntentOps(entrypoint common.Address, chainID 
 
 // SolveIntents returns a BatchHandlerFunc that will send the batch of UserOperations to the Solver
 // and those solved to be sent on chain.
-func (ei *EntryPointIntents) SolveIntents() modules.BatchHandlerFunc {
+func (ei *IntentsHandler) SolveIntents() modules.BatchHandlerFunc {
 	return func(ctx *modules.BatchHandlerCtx) error {
 		batchIntentIndices := make(batchIntentIndices)
 
@@ -142,7 +142,7 @@ func (ei *EntryPointIntents) SolveIntents() modules.BatchHandlerFunc {
 
 // sendToSolver sends the batch of UserOperations to the Solver.
 // TODO - implement retry logic
-func (ei *EntryPointIntents) sendToSolver(body model.BodyOfUserOps) error {
+func (ei *IntentsHandler) sendToSolver(body model.BodyOfUserOps) error {
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return err
