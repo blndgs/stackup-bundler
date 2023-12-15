@@ -1,7 +1,6 @@
 package userop
 
 import (
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -56,24 +55,17 @@ func decodeOpTypes(
 	// String to []byte conversion
 	if f == reflect.String && t == reflect.Slice {
 		byteStr := data.(string)
-
-		// Check for hex encoding
-		if len(byteStr) >= 2 && byteStr[:2] == "0x" {
-			b, err := hex.DecodeString(byteStr[2:])
-			if err != nil {
-				return nil, err
-			}
-			return b, nil
+		if len(byteStr) < 2 || byteStr[:2] != "0x" {
+			return nil, errors.New("not byte string")
 		}
 
-		// Handle base64 encoding
-		b, err := base64.StdEncoding.DecodeString(byteStr)
-		if err == nil {
-			return b, nil
+		b, err := hex.DecodeString(byteStr[2:])
+		if err != nil {
+			return nil, err
 		}
-
-		return nil, errors.New("string is not valid hex or base64 encoded")
+		return b, nil
 	}
+
 	return data, nil
 }
 
