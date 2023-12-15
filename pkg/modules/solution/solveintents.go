@@ -58,22 +58,31 @@ func New(solverURL string) *EntryPointIntents {
 
 // bufferIntentOps caches the index of the userOp in the received batch and creates the UserOperationExt slice for the
 // Solver with cached Hashes and ProcessingStatus set to `Received`.
-func (ei *EntryPointIntents) bufferIntentOps(entrypoint common.Address, chainID *big.Int, batchIndices batchIntentIndices, userOps []*model.UserOperation) []model.UserOperationExt {
-	userOpsExt := make([]model.UserOperationExt, len(userOps))
-	for idx, op := range userOps {
+func (ei *EntryPointIntents) bufferIntentOps(entrypoint common.Address, chainID *big.Int, batchIndices batchIntentIndices, userOpBatch []*model.UserOperation) model.BodyOfUserOps {
+	body := model.BodyOfUserOps{
+		UserOps:    make([]*model.UserOperation, 0, len(userOpBatch)),
+		UserOpsExt: make([]model.UserOperationExt, 0, len(userOpBatch)),
+	}
+	for idx, op := range userOpBatch {
 		if op.HasIntent() {
-			userOpsExt[idx].ProcessingStatus = model.Received
 			hashID := op.GetUserOpHash(entrypoint, chainID).String()
 
-			// Cache hash before it changes
-			userOpsExt[idx].OriginalHashValue = hashID
+			// Don't mutate the original op
+			clonedOp := *op
+			body.UserOps = append(body.UserOps, &clonedOp)
+
+			body.UserOpsExt = append(body.UserOpsExt, model.UserOperationExt{
+				OriginalHashValue: hashID,
+				// Cache hash before it changes
+				ProcessingStatus: model.Received,
+			})
 
 			// Reverse caching
 			batchIndices[opHashID(hashID)] = batchOpIndex(idx)
 		}
 	}
 
-	return userOpsExt
+	return body
 }
 
 // SolveIntents returns a BatchHandlerFunc that will send the batch of UserOperations to the Solver
@@ -87,9 +96,11 @@ func (ei *EntryPointIntents) SolveIntents() modules.BatchHandlerFunc {
 		modelUserOps := *(*[]*model.UserOperation)(unsafe.Pointer(&ctx.Batch))
 
 		// Prepare the body to send to the Solver
-		body := model.BodyOfUserOps{
-			UserOps:    modelUserOps,
-			UserOpsExt: ei.bufferIntentOps(ctx.EntryPoint, ctx.ChainID, batchIntentIndices, modelUserOps),
+		body := ei.bufferIntentOps(ctx.EntryPoint, ctx.ChainID, batchIntentIndices, modelUserOps)
+
+		// Intents to process
+		if len(body.UserOps) == 0 {
+			return nil
 		}
 
 		if err := ei.sendToSolver(body); err != nil {
