@@ -1,3 +1,8 @@
+// Scripted test wallet functionality for submitting Intent userOps to the
+// bundler.
+// Sends semi-mocked userOps to the bundler with live nonce,
+// chainID values. Support submitting userOps 0 gas for testing.
+// UserOp signature verification is included.
 package main
 
 import (
@@ -40,7 +45,7 @@ func main() {
 		panic(err)
 	}
 
-	zeroGas := len(os.Args) > 1 && (os.Args[1] == "zero" || os.Args[1] == "0")
+	zeroGas := (len(os.Args) > 1 && (os.Args[1] == "zero" || os.Args[1] == "0")) || len(os.Args) == 1 // default choice
 	unsignedUserOp := getMockUserOp(sender, nonce, zeroGas)
 
 	userOp := getVerifiedSignedUserOp(unsignedUserOp, eoaSigner.PrivateKey, eoaSigner.PublicKey, chainID)
