@@ -83,9 +83,10 @@ func (ei *EntryPointIntents) SolveIntents() modules.BatchHandlerFunc {
 		batchIntentIndices := make(batchIntentIndices)
 
 		// cast the received userOp batch to a slice of model.UserOperation
+		// to be sent to the Solver
 		modelUserOps := *(*[]*model.UserOperation)(unsafe.Pointer(&ctx.Batch))
 
-		// Rest of the sendToSolver logic
+		// Prepare the body to send to the Solver
 		body := model.BodyOfUserOps{
 			UserOps:    modelUserOps,
 			UserOpsExt: ei.bufferIntentOps(ctx.EntryPoint, ctx.ChainID, batchIntentIndices, modelUserOps),
@@ -95,7 +96,6 @@ func (ei *EntryPointIntents) SolveIntents() modules.BatchHandlerFunc {
 			return err
 		}
 
-		// Mark the userOps that have been expired or invalid to be removed from the batch
 		for idx, opExt := range body.UserOpsExt {
 			batchIndex := batchIntentIndices[opHashID(body.UserOpsExt[idx].OriginalHashValue)]
 			switch opExt.ProcessingStatus {
