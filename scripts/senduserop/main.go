@@ -50,12 +50,14 @@ func main() {
 
 	userOp := getVerifiedSignedUserOp(unsignedUserOp, eoaSigner.PrivateKey, eoaSigner.PublicKey, chainID)
 
-	sendUserOp(userOp)
+	sendUserOp(userOp, chainID)
 }
 
 // sendUserOp makes a UserOperation RPC request to the bundler.
-func sendUserOp(userOp *userop.UserOperation) {
-	println("userOp ------------> bundler")
+func sendUserOp(userOp *userop.UserOperation, chainID *big.Int) {
+	userOpHash := userOp.GetUserOpHash(common.HexToAddress(entrypointAddrV060), chainID).String()
+
+	println("userOp (", userOpHash, ") ------------> bundler")
 	op := model.UserOperation(*userOp)
 	println(op.String())
 	println()
