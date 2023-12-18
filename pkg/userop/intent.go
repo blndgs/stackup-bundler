@@ -9,3 +9,9 @@ func (op *UserOperation) HasIntent() bool {
 
 	return modelUserOp.HasIntent()
 }
+
+func (op *UserOperation) IsIntentExecutable() bool {
+	modelUserOp := model.UserOperation(*op)
+
+	return modelUserOp.HasIntent() && modelUserOp.HasEVMInstructions()
+}

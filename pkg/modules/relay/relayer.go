@@ -70,10 +70,18 @@ func (r *Relayer) SendUserOperation() modules.BatchHandlerFunc {
 		nonIntentsBatch := make([]*userop.UserOperation, 0, len(ctx.Batch))
 		intentsBatch := make([]*userop.UserOperation, 0, len(ctx.Batch))
 		for _, userOp := range ctx.Batch {
-			if userOp.HasIntent() {
+			if userOp.IsIntentExecutable() {
+				// Solved Intent UserOperations
 				intentsBatch = append(intentsBatch, userOp)
-			} else {
+
+			} else if !userOp.HasIntent() {
+				// conventional UserOperation
 				nonIntentsBatch = append(nonIntentsBatch, userOp)
+
+			} else {
+				// Do not send unsolved Intents to the EntryPoint
+				r.logger.WithValues("userOp Hash", userOp.GetUserOpHash(ctx.EntryPoint, ctx.ChainID)).
+					Info("unsolved intent not sent to entrypoint")
 			}
 		}
 
