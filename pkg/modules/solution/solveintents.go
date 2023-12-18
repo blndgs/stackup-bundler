@@ -104,7 +104,10 @@ func (ei *IntentsHandler) SolveIntents() modules.BatchHandlerFunc {
 		}
 
 		if err := ei.sendToSolver(body); err != nil {
-			return err
+			// swallow Solver connectivity error here to avoid
+			// an infinite loop of retries for the same batch till the
+			// batch expires or the solver is back online.
+			return nil
 		}
 
 		for idx, opExt := range body.UserOpsExt {
@@ -141,7 +144,6 @@ func (ei *IntentsHandler) SolveIntents() modules.BatchHandlerFunc {
 }
 
 // sendToSolver sends the batch of UserOperations to the Solver.
-// TODO - implement retry logic
 func (ei *IntentsHandler) sendToSolver(body model.BodyOfUserOps) error {
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
