@@ -169,7 +169,16 @@ func (i *Bundler) Process(ep common.Address) (*modules.BatchHandlerCtx, error) {
 	}
 
 	// Remove userOps that remain in the context from mempool.
-	rmOps := append([]*userop.UserOperation{}, ctx.Batch...)
+	// Unsolved intents are not removed from the mempool
+	// for another Solving go in the next bundler run.
+	rmOps := make([]*userop.UserOperation, 0, len(ctx.Batch))
+	for _, remainingOp := range ctx.Batch {
+		if remainingOp.IsUnsolvedIntent() {
+			continue
+		}
+
+		rmOps = append(rmOps, remainingOp)
+	}
 	rmOps = append(rmOps, ctx.PendingRemoval...)
 	if err := i.mempool.RemoveOps(ep, rmOps...); err != nil {
 		l.Error(err, "bundler run error")
