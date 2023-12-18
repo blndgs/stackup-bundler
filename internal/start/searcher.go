@@ -62,7 +62,7 @@ func SearcherMode() {
 
 	eth := ethclient.NewClient(rpc)
 
-	fb := flashbotsrpc.NewFlashbotsRPC(conf.EthBuilderUrl)
+	fb := flashbotsrpc.NewBuilderBroadcastRPC(conf.EthBuilderUrls)
 
 	chain, err := eth.ChainID(context.Background())
 	if err != nil {
@@ -121,6 +121,7 @@ func SearcherMode() {
 	solver := solution.New(conf.SolverUrl)
 
 	builder := builder.New(eoa, eth, fb, beneficiary, conf.BlocksInTheFuture)
+
 	paymaster := paymaster.New(db)
 
 	// Init Client
@@ -196,6 +197,7 @@ func SearcherMode() {
 	}
 	r.POST("/", handlers...)
 	r.POST("/rpc", handlers...)
+
 	if err := r.Run(fmt.Sprintf(":%d", conf.Port)); err != nil {
 		log.Fatal(err)
 	}

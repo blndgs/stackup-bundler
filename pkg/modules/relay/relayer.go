@@ -85,6 +85,7 @@ func (r *Relayer) SendUserOperation() modules.BatchHandlerFunc {
 			}
 		}
 
+		ctx.Data["estimate_revert_reasons"] = estRev
 		// Only proceed if there are conventional UserOperations to process
 		if len(nonIntentsBatch) > 0 {
 			opts := r.getCallOptions(ctx, nonIntentsBatch)
