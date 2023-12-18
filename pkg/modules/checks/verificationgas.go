@@ -19,6 +19,12 @@ func ValidateVerificationGas(op *userop.UserOperation, ov *gas.Overhead, maxVeri
 		)
 	}
 
+	if op.HasIntent() {
+		// If the UserOperation has intent, we can't calculate the preVerificationGas until we know the
+		// calldata size. We can't know the calldata size until we know the intent solution.
+		return nil
+	}
+
 	pvg, err := ov.CalcPreVerificationGas(op)
 	if err != nil {
 		return err

@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
+
 	"github.com/stackup-wallet/stackup-bundler/pkg/signer"
 )
 
@@ -24,6 +25,7 @@ type Values struct {
 	MaxOpTTL                time.Duration
 	MaxOpsForUnstakedSender int
 	Beneficiary             string
+	SolverUrl               string
 
 	// Searcher mode variables.
 	EthBuilderUrls    []string
@@ -92,6 +94,7 @@ func GetValues() *Values {
 	viper.SetDefault("erc4337_bundler_otel_insecure_mode", false)
 	viper.SetDefault("erc4337_bundler_debug_mode", false)
 	viper.SetDefault("erc4337_bundler_gin_mode", gin.ReleaseMode)
+	viper.SetDefault("solver_url", "http://localhost:7322/solve")
 
 	// Read in from .env file if available
 	viper.SetConfigName(".env")
@@ -185,6 +188,7 @@ func GetValues() *Values {
 	altMempoolIds := envArrayToStringSlice(viper.GetString("erc4337_bundler_alt_mempool_ids"))
 	debugMode := viper.GetBool("erc4337_bundler_debug_mode")
 	ginMode := viper.GetString("erc4337_bundler_gin_mode")
+	solverUrl := viper.GetString("solver_url")
 	return &Values{
 		PrivateKey:              privateKey,
 		EthClientUrl:            ethClientUrl,
@@ -206,5 +210,6 @@ func GetValues() *Values {
 		AltMempoolIds:           altMempoolIds,
 		DebugMode:               debugMode,
 		GinMode:                 ginMode,
+		SolverUrl:               solverUrl,
 	}
 }

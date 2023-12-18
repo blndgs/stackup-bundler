@@ -6,12 +6,15 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/blndgs/model"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/go-logr/logr"
+
 	"github.com/stackup-wallet/stackup-bundler/pkg/entrypoint/transaction"
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules"
 	"github.com/stackup-wallet/stackup-bundler/pkg/signer"
+	"github.com/stackup-wallet/stackup-bundler/pkg/userop"
 )
 
 // Relayer provides a module that can relay batches with a regular EOA. Relaying batches to the EntryPoint
@@ -63,46 +66,92 @@ func (r *Relayer) SetWaitTimeout(timeout time.Duration) {
 // transaction.
 func (r *Relayer) SendUserOperation() modules.BatchHandlerFunc {
 	return func(ctx *modules.BatchHandlerCtx) error {
-		opts := transaction.Opts{
-			EOA:         r.eoa,
-			Eth:         r.eth,
-			ChainID:     ctx.ChainID,
-			EntryPoint:  ctx.EntryPoint,
-			Batch:       ctx.Batch,
-			Beneficiary: r.beneficiary,
-			BaseFee:     ctx.BaseFee,
-			Tip:         ctx.Tip,
-			GasPrice:    ctx.GasPrice,
-			GasLimit:    0,
-			WaitTimeout: r.waitTimeout,
-		}
-		// Estimate gas for handleOps() and drop all userOps that cause unexpected reverts.
-		estRev := []string{}
-		for len(ctx.Batch) > 0 {
-			est, revert, err := transaction.EstimateHandleOpsGas(&opts)
-
-			if err != nil {
-				return err
-			} else if revert != nil {
-				ctx.MarkOpIndexForRemoval(revert.OpIndex)
-				estRev = append(estRev, revert.Reason)
+		// Filter out UserOperations on HasIntent() result
+		nonIntentsBatch := make([]*userop.UserOperation, 0, len(ctx.Batch))
+		intentsBatch := make([]*userop.UserOperation, 0, len(ctx.Batch))
+		for _, userOp := range ctx.Batch {
+			if userOp.HasIntent() {
+				intentsBatch = append(intentsBatch, userOp)
 			} else {
-				opts.GasLimit = est
-				break
+				nonIntentsBatch = append(nonIntentsBatch, userOp)
 			}
 		}
-		ctx.Data["estimate_revert_reasons"] = estRev
 
-		// Call handleOps() with gas estimate. Any userOps that cause a revert at this stage will be
-		// caught and dropped in the next iteration.
-		if len(ctx.Batch) > 0 {
-			if txn, err := transaction.HandleOps(&opts); err != nil {
+		ctx.Data["estimate_revert_reasons"] = estRev
+		// Only proceed if there are conventional UserOperations to process
+		if len(nonIntentsBatch) > 0 {
+			opts := r.getCallOptions(ctx, nonIntentsBatch)
+
+			// Estimate gas for handleOps() and drop all userOps that cause unexpected reverts.
+			estRev := []string{}
+			for len(nonIntentsBatch) > 0 {
+				est, revert, err := transaction.EstimateHandleOpsGas(&opts)
+
+				if err != nil {
+					return err
+				} else if revert != nil {
+					ctx.MarkOpIndexForRemoval(revert.OpIndex)
+					estRev = append(estRev, revert.Reason)
+				} else {
+					opts.GasLimit = est
+					break
+				}
+			}
+			ctx.Data["relayer_est_revert_reasons"] = estRev
+
+			// Call handleOps() with gas estimate. Any userOps that cause a revert at this stage will be
+			// caught and dropped in the next iteration.
+			if err := handleOps(ctx, opts); err != nil {
 				return err
-			} else {
-				ctx.Data["txn_hash"] = txn.Hash().String()
+			}
+
+			return nil
+		} // end of sending conventional userOps
+
+		if len(intentsBatch) > 0 {
+			opts := r.getCallOptions(ctx, intentsBatch)
+			println()
+			for _, op := range intentsBatch {
+				// cast to print it
+				operation := model.UserOperation(*op)
+				println(operation.String())
+			}
+			println()
+			println("--> handleOps")
+
+			if err := handleOps(ctx, opts); err != nil {
+				// swallow error
+				println(err.Error())
 			}
 		}
 
 		return nil
 	}
+}
+
+func handleOps(ctx *modules.BatchHandlerCtx, opts transaction.Opts) error {
+	if txn, err := transaction.HandleOps(&opts); err != nil {
+		return err
+	} else {
+		ctx.Data["txn_hash"] = txn.Hash().String()
+	}
+
+	return nil
+}
+
+func (r *Relayer) getCallOptions(ctx *modules.BatchHandlerCtx, intentsBatch []*userop.UserOperation) transaction.Opts {
+	opts := transaction.Opts{
+		EOA:         r.eoa,
+		Eth:         r.eth,
+		ChainID:     ctx.ChainID,
+		EntryPoint:  ctx.EntryPoint,
+		Batch:       intentsBatch,
+		Beneficiary: r.beneficiary,
+		BaseFee:     ctx.BaseFee,
+		Tip:         ctx.Tip,
+		GasPrice:    ctx.GasPrice,
+		GasLimit:    0,
+		WaitTimeout: r.waitTimeout,
+	}
+	return opts
 }

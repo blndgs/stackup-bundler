@@ -31,6 +31,7 @@ import (
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules/expire"
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules/gasprice"
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules/paymaster"
+	"github.com/stackup-wallet/stackup-bundler/pkg/modules/solution"
 	"github.com/stackup-wallet/stackup-bundler/pkg/signer"
 )
 
@@ -116,7 +117,9 @@ func SearcherMode() {
 
 	exp := expire.New(conf.MaxOpTTL)
 
-	// TODO: Create separate go-routine for tracking transactions sent to the block builder.
+	// Init Intents Solver
+	solver := solution.New(conf.SolverUrl)
+
 	builder := builder.New(eoa, eth, fb, beneficiary, conf.BlocksInTheFuture)
 
 	paymaster := paymaster.New(db)
@@ -139,7 +142,7 @@ func SearcherMode() {
 	)
 
 	// Init Bundler
-	b := bundler.New(mem, chain, conf.SupportedEntryPoints)
+	b := bundler.New(mem, chain, conf.SupportedEntryPoints, conf.SolverUrl)
 	b.SetGetBaseFeeFunc(gasprice.GetBaseFeeWithEthClient(eth))
 	b.SetGetGasTipFunc(gasprice.GetGasTipWithEthClient(eth))
 	b.SetGetLegacyGasPriceFunc(gasprice.GetLegacyGasPriceWithEthClient(eth))
@@ -155,6 +158,7 @@ func SearcherMode() {
 		batch.MaintainGasLimit(conf.MaxBatchGasLimit),
 		check.CodeHashes(),
 		check.PaymasterDeposit(),
+		solver.SolveIntents(),
 		builder.SendUserOperation(),
 		paymaster.IncOpsIncluded(),
 		check.Clean(),

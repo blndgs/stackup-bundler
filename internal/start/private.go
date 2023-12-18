@@ -6,12 +6,15 @@ import (
 	"log"
 	"net/http"
 
-	badger "github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"go.opentelemetry.io/otel"
+
 	"github.com/stackup-wallet/stackup-bundler/internal/config"
 	"github.com/stackup-wallet/stackup-bundler/internal/logger"
 	"github.com/stackup-wallet/stackup-bundler/internal/o11y"
@@ -27,9 +30,8 @@ import (
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules/gasprice"
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules/paymaster"
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules/relay"
+	"github.com/stackup-wallet/stackup-bundler/pkg/modules/solution"
 	"github.com/stackup-wallet/stackup-bundler/pkg/signer"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
-	"go.opentelemetry.io/otel"
 )
 
 func PrivateMode() {
@@ -123,6 +125,8 @@ func PrivateMode() {
 
 	exp := expire.New(conf.MaxOpTTL)
 
+	solver := solution.New(conf.SolverUrl)
+
 	relayer := relay.New(eoa, eth, chain, beneficiary, logr)
 
 	paymaster := paymaster.New(db)
@@ -144,7 +148,7 @@ func PrivateMode() {
 	)
 
 	// Init Bundler
-	b := bundler.New(mem, chain, conf.SupportedEntryPoints)
+	b := bundler.New(mem, chain, conf.SupportedEntryPoints, conf.SolverUrl)
 	b.SetGetBaseFeeFunc(gasprice.GetBaseFeeWithEthClient(eth))
 	b.SetGetGasTipFunc(gasprice.GetGasTipWithEthClient(eth))
 	b.SetGetLegacyGasPriceFunc(gasprice.GetLegacyGasPriceWithEthClient(eth))
@@ -160,6 +164,7 @@ func PrivateMode() {
 		batch.MaintainGasLimit(conf.MaxBatchGasLimit),
 		check.CodeHashes(),
 		check.PaymasterDeposit(),
+		solver.SolveIntents(),
 		relayer.SendUserOperation(),
 		paymaster.IncOpsIncluded(),
 		check.Clean(),
