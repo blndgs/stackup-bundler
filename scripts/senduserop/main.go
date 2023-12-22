@@ -38,7 +38,7 @@ const entrypointAddrV060 = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
 func main() {
 	nodeURL, eoaSigner := readConf()
 
-	sender := common.HexToAddress("0x3068c2408c01bECde4BcCB9f246b56651BE1d12D")
+	sender := common.HexToAddress("0x6B5f6558CB8B3C8Fec2DA0B1edA9b9d5C064ca47")
 
 	nonce, chainID, err := getNodeIDs(nodeURL, eoaSigner.Address)
 	if err != nil {
@@ -50,6 +50,8 @@ func main() {
 
 	userOp := getVerifiedSignedUserOp(unsignedUserOp, eoaSigner.PrivateKey, eoaSigner.PublicKey, chainID)
 
+	fmt.Printf("%s\n", string(userOp.InitCode))
+	fmt.Printf("%x\n", userOp.Signature)
 	sendUserOp(userOp, chainID)
 }
 
@@ -61,6 +63,12 @@ func sendUserOp(userOp *userop.UserOperation, chainID *big.Int) {
 	op := model.UserOperation(*userOp)
 	println(op.String())
 	println()
+	// marshal JSON of op
+	opJSON, err := op.MarshalJSON()
+	if err != nil {
+		panic(err)
+	}
+	println(string(opJSON))
 
 	request := JsonRpcRequest{
 		Jsonrpc: "2.0",
@@ -91,7 +99,7 @@ func sendUserOp(userOp *userop.UserOperation, chainID *big.Int) {
 
 func getMockUserOp(sender common.Address, nonce *big.Int, zeroGas bool) *userop.UserOperation {
 	intentJSON := `{"sender":"0x0A7199a96fdf0252E09F76545c1eF2be3692F46b","kind":"swap","hash":"","sellToken":"TokenA","buyToken":"TokenB","sellAmount":10,"buyAmount":5,"partiallyFillable":false,"status":"Received","createdAt":0,"expirationAt":0}`
-
+	println("intentJSON:", intentJSON)
 	// Conditional gas values based on zeroGas flag
 	var callGasLimit, verificationGasLimit, preVerificationGas, maxFeePerGas, maxPriorityFeePerGas *big.Int
 	if zeroGas {
