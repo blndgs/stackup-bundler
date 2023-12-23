@@ -3,7 +3,7 @@ module github.com/stackup-wallet/stackup-bundler
 go 1.20
 
 require (
-	github.com/blndgs/model v0.7.0
+	github.com/blndgs/model v0.8.0
 	github.com/deckarep/golang-set/v2 v2.3.0
 	github.com/dgraph-io/badger/v3 v3.2103.5
 	github.com/ethereum/go-ethereum v1.11.5
@@ -14,7 +14,6 @@ require (
 	github.com/go-playground/validator/v10 v10.12.0
 	github.com/goccy/go-json v0.10.2
 	github.com/google/go-cmp v0.5.9
-	github.com/metachris/flashbotsrpc v0.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/metachris/flashbotsrpc v0.6.0
 	github.com/mitchellh/mapstructure v1.5.0
