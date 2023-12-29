@@ -178,12 +178,12 @@ func getSignature(userOp *userop.UserOperation, privateKey *ecdsa.PrivateKey, ch
 	}
 
 	// Normalize S value for Ethereum
-	sValue := big.NewInt(0).SetBytes(signature[32:64])
-	secp256k1N := crypto.S256().Params().N
-	if sValue.Cmp(new(big.Int).Rsh(secp256k1N, 1)) > 0 {
-		sValue.Sub(secp256k1N, sValue)
-		copy(signature[32:64], sValue.Bytes())
-	}
+	// sValue := big.NewInt(0).SetBytes(signature[32:64])
+	// secp256k1N := crypto.S256().Params().N
+	// if sValue.Cmp(new(big.Int).Rsh(secp256k1N, 1)) > 0 {
+	// 	sValue.Sub(secp256k1N, sValue)
+	// 	copy(signature[32:64], sValue.Bytes())
+	// }
 
 	return signature
 }
