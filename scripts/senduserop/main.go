@@ -20,6 +20,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/goccy/go-json"
+	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 
 	"github.com/stackup-wallet/stackup-bundler/pkg/signer"
@@ -177,6 +178,8 @@ func getSignature(userOp *userop.UserOperation, privateKey *ecdsa.PrivateKey, ch
 		panic(err)
 	}
 
+	signature[64] += 27 // Transform V from 0/1 to 27/28 according to the yellow paper
+
 	// Normalize S value for Ethereum
 	// sValue := big.NewInt(0).SetBytes(signature[32:64])
 	// secp256k1N := crypto.S256().Params().N
@@ -189,13 +192,22 @@ func getSignature(userOp *userop.UserOperation, privateKey *ecdsa.PrivateKey, ch
 }
 
 func verifySignature(userOp *userop.UserOperation, publicKey *ecdsa.PublicKey, chainID *big.Int) bool {
+	if len(userOp.Signature) != 65 {
+		panic(errors.New("signature must be 65 bytes long"))
+	}
+	if userOp.Signature[64] != 27 && userOp.Signature[64] != 28 {
+		panic(errors.New("invalid Ethereum signature (V is not 27 or 28)"))
+	}
+
+	signature := bytes.Clone(userOp.Signature) // Not in RSV format
+
+	signature[64] -= 27 // Transform yellow paper V from 27/28 to 0/1
+
 	userOpHash := userOp.GetUserOpHash(common.HexToAddress(entrypointAddrV060), chainID).Bytes()
 
 	prefixedHash := crypto.Keccak256Hash(
 		[]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(userOpHash), userOpHash)),
 	)
-
-	signature := userOp.Signature // Already in RSV format
 
 	recoveredPubKey, err := crypto.SigToPub(prefixedHash.Bytes(), signature)
 	if err != nil {
