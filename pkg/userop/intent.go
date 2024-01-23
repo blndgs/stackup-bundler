@@ -12,12 +12,18 @@ func (op *UserOperation) HasIntent() bool {
 
 func (op *UserOperation) IsUnsolvedIntent() bool {
 	modelUserOp := model.UserOperation(*op)
+	_, hasCalldataIntent := model.ExtractJSONFromField(string(modelUserOp.CallData))
 
-	return modelUserOp.HasIntent() && !modelUserOp.HasEVMInstructions()
+	return hasCalldataIntent
 }
 
 func (op *UserOperation) IsIntentExecutable() bool {
 	modelUserOp := model.UserOperation(*op)
 
-	return modelUserOp.HasIntent() && modelUserOp.HasEVMInstructions()
+	var hasSigIntent bool
+	if len(modelUserOp.Signature) > model.SignatureLength {
+		_, hasSigIntent = model.ExtractJSONFromField(string(modelUserOp.Signature[model.SignatureLength:]))
+	}
+
+	return hasSigIntent
 }
