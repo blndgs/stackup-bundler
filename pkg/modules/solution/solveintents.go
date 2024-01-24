@@ -132,17 +132,11 @@ func (ei *IntentsHandler) SolveIntents() modules.BatchHandlerFunc {
 				// dropping further processing
 				ctx.MarkOpIndexForRemoval(int(batchIndex))
 			case model.Solved:
-				intentSolution, err := body.UserOps[idx].GetEVMInstructions()
-				if err != nil {
-					// failed to retrieve the EVM solution for the solved Intent
-					// allow residing in the mempool for another solving attempt or till expired
-					unsolvedOpJson, _ := json.Marshal(body.UserOps[idx])
-					return errors.Errorf("failed to get EVM instructions: %s for solved Intent at index %d, userOp: %s", err, batchIndex, unsolvedOpJson)
-				}
-
 				// set the solved userOp values to the received batch's userOp values
-
-				modelUserOps[batchIndex].SetEVMInstructions(intentSolution)
+				ctx.Batch[batchIndex].CallData = make([]byte, len(body.UserOps[idx].CallData))
+				copy(ctx.Batch[batchIndex].CallData, body.UserOps[idx].CallData)
+				ctx.Batch[batchIndex].Signature = make([]byte, len(body.UserOps[idx].Signature))
+				copy(ctx.Batch[batchIndex].Signature, body.UserOps[idx].Signature)
 				ctx.Batch[batchIndex].CallGasLimit = body.UserOps[idx].CallGasLimit
 				ctx.Batch[batchIndex].VerificationGasLimit = body.UserOps[idx].VerificationGasLimit
 				ctx.Batch[batchIndex].PreVerificationGas = body.UserOps[idx].PreVerificationGas
