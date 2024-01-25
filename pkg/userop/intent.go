@@ -12,18 +12,22 @@ func (op *UserOperation) HasIntent() bool {
 
 func (op *UserOperation) IsUnsolvedIntent() bool {
 	modelUserOp := model.UserOperation(*op)
-	_, hasCalldataIntent := model.ExtractJSONFromField(string(modelUserOp.CallData))
 
-	return hasCalldataIntent
-}
-
-func (op *UserOperation) IsIntentExecutable() bool {
-	modelUserOp := model.UserOperation(*op)
-
-	var hasSigIntent bool
-	if len(modelUserOp.Signature) > model.SignatureLength {
-		_, hasSigIntent = model.ExtractJSONFromField(string(modelUserOp.Signature[model.SignatureLength:]))
+	status, err := modelUserOp.Validate()
+	if err != nil || status != model.UnsolvedUserOp {
+		return false
 	}
 
-	return hasSigIntent
+	return true
+}
+
+func (op *UserOperation) IsSolvedIntent() bool {
+	modelUserOp := model.UserOperation(*op)
+
+	status, err := modelUserOp.Validate()
+	if err != nil || status != model.SolvedUserOp {
+		return false
+	}
+
+	return true
 }

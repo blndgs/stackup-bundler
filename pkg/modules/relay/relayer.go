@@ -70,7 +70,7 @@ func (r *Relayer) SendUserOperation() modules.BatchHandlerFunc {
 		nonIntentsBatch := make([]*userop.UserOperation, 0, len(ctx.Batch))
 		intentsBatch := make([]*userop.UserOperation, 0, len(ctx.Batch))
 		for _, userOp := range ctx.Batch {
-			if userOp.IsIntentExecutable() {
+			if userOp.IsSolvedIntent() {
 				// Solved Intent UserOperations
 				intentsBatch = append(intentsBatch, userOp)
 
