@@ -3,6 +3,7 @@
 package relay
 
 import (
+	"fmt"
 	"math/big"
 	"time"
 
@@ -11,7 +12,9 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/go-logr/logr"
 
+	"github.com/stackup-wallet/stackup-bundler/pkg/entrypoint/reverts"
 	"github.com/stackup-wallet/stackup-bundler/pkg/entrypoint/transaction"
+	apperrors "github.com/stackup-wallet/stackup-bundler/pkg/errors"
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules"
 	"github.com/stackup-wallet/stackup-bundler/pkg/signer"
 	"github.com/stackup-wallet/stackup-bundler/pkg/userop"
@@ -126,9 +129,22 @@ func (r *Relayer) SendUserOperation() modules.BatchHandlerFunc {
 			println()
 			println("--> handleOps")
 
-			if err := handleOps(ctx, opts); err != nil {
-				// swallow error
-				println(err.Error())
+			err := handleOps(ctx, opts)
+			if err != nil {
+				res, rpcErr := reverts.NewExecutionResult(err)
+				if rpcErr != nil {
+					println("rpcErr:", rpcErr.Error())
+					fo, foErr := reverts.NewFailedOp(err)
+					if foErr != nil {
+						println("foErr:", foErr.Error())
+						if err != nil {
+							return err
+						}
+						return fmt.Errorf("%s, %s", rpcErr, foErr)
+					}
+					return apperrors.NewRPCError(apperrors.REJECTED_BY_EP_OR_ACCOUNT, fo.Reason, fo)
+				}
+				fmt.Printf("res: %+v\n", res)
 			}
 		}
 
