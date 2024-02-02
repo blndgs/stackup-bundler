@@ -4,23 +4,27 @@ package bundler
 import (
 	"context"
 	"math/big"
+	"net/http"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
+
 	"github.com/stackup-wallet/stackup-bundler/internal/logger"
 	"github.com/stackup-wallet/stackup-bundler/pkg/mempool"
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules"
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules/gasprice"
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules/noop"
 	"github.com/stackup-wallet/stackup-bundler/pkg/userop"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/metric"
 )
 
 // Bundler controls the end to end process of creating a batch of UserOperations from the mempool and sending
 // it to the EntryPoint.
 type Bundler struct {
+	solverURL            string
+	solverClient         *http.Client
 	mempool              *mempool.Mempool
 	chainID              *big.Int
 	supportedEntryPoints []common.Address
@@ -38,8 +42,10 @@ type Bundler struct {
 
 // New initializes a new EIP-4337 bundler which can be extended with modules for validating batches and
 // excluding UserOperations that should not be sent to the EntryPoint and/or dropped from the mempool.
-func New(mempool *mempool.Mempool, chainID *big.Int, supportedEntryPoints []common.Address) *Bundler {
+func New(mempool *mempool.Mempool, chainID *big.Int, supportedEntryPoints []common.Address, solverURL string) *Bundler {
 	return &Bundler{
+		solverURL:            solverURL,
+		solverClient:         &http.Client{Timeout: 100 * time.Second},
 		mempool:              mempool,
 		chainID:              chainID,
 		supportedEntryPoints: supportedEntryPoints,
@@ -128,6 +134,7 @@ func (i *Bundler) Process(ep common.Address) (*modules.BatchHandlerCtx, error) {
 	if len(batch) == 0 {
 		return nil, nil
 	}
+
 	batch = adjustBatchSize(i.maxBatch, batch)
 
 	// Get current block basefee
@@ -162,7 +169,16 @@ func (i *Bundler) Process(ep common.Address) (*modules.BatchHandlerCtx, error) {
 	}
 
 	// Remove userOps that remain in the context from mempool.
-	rmOps := append([]*userop.UserOperation{}, ctx.Batch...)
+	// Unsolved intents are not removed from the mempool
+	// for another Solving go in the next bundler run.
+	rmOps := make([]*userop.UserOperation, 0, len(ctx.Batch))
+	for _, remainingOp := range ctx.Batch {
+		if remainingOp.IsUnsolvedIntent() {
+			continue
+		}
+
+		rmOps = append(rmOps, remainingOp)
+	}
 	rmOps = append(rmOps, ctx.PendingRemoval...)
 	if err := i.mempool.RemoveOps(ep, rmOps...); err != nil {
 		l.Error(err, "bundler run error")

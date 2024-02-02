@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
+
 	"github.com/stackup-wallet/stackup-bundler/pkg/entrypoint"
 	"github.com/stackup-wallet/stackup-bundler/pkg/userop"
 )
@@ -107,6 +108,16 @@ func (c *UserOpHandlerCtx) GetDepositInfo(entity common.Address) *entrypoint.ISt
 	}
 
 	return dep.(*entrypoint.IStakeManagerDepositInfo)
+}
+
+// GetDeposits retrieves deposits if any
+func (c *UserOpHandlerCtx) GetDeposits() (deps []*entrypoint.IStakeManagerDepositInfo) {
+    c.deposits.Range(func(key, value any) bool {
+        deps = append(deps, value.(*entrypoint.IStakeManagerDepositInfo))
+        return true
+    })
+
+    return deps
 }
 
 // GetPendingOps returns all pending UserOperations in the mempool by the same UserOp.Sender.

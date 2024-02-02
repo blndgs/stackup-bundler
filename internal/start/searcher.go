@@ -6,13 +6,16 @@ import (
 	"log"
 	"net/http"
 
-	badger "github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/metachris/flashbotsrpc"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"go.opentelemetry.io/otel"
+
 	"github.com/stackup-wallet/stackup-bundler/internal/config"
 	"github.com/stackup-wallet/stackup-bundler/internal/logger"
 	"github.com/stackup-wallet/stackup-bundler/internal/o11y"
@@ -28,9 +31,8 @@ import (
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules/expire"
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules/gasprice"
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules/paymaster"
+	"github.com/stackup-wallet/stackup-bundler/pkg/modules/solution"
 	"github.com/stackup-wallet/stackup-bundler/pkg/signer"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
-	"go.opentelemetry.io/otel"
 )
 
 func SearcherMode() {
@@ -115,7 +117,9 @@ func SearcherMode() {
 
 	exp := expire.New(conf.MaxOpTTL)
 
-	// TODO: Create separate go-routine for tracking transactions sent to the block builder.
+	// Init Intents Solver
+	solver := solution.New(conf.SolverUrl)
+
 	builder := builder.New(eoa, eth, fb, beneficiary, conf.BlocksInTheFuture)
 
 	paymaster := paymaster.New(db)
@@ -138,7 +142,7 @@ func SearcherMode() {
 	)
 
 	// Init Bundler
-	b := bundler.New(mem, chain, conf.SupportedEntryPoints)
+	b := bundler.New(mem, chain, conf.SupportedEntryPoints, conf.SolverUrl)
 	b.SetGetBaseFeeFunc(gasprice.GetBaseFeeWithEthClient(eth))
 	b.SetGetGasTipFunc(gasprice.GetGasTipWithEthClient(eth))
 	b.SetGetLegacyGasPriceFunc(gasprice.GetLegacyGasPriceWithEthClient(eth))
@@ -154,6 +158,7 @@ func SearcherMode() {
 		batch.MaintainGasLimit(conf.MaxBatchGasLimit),
 		check.CodeHashes(),
 		check.PaymasterDeposit(),
+		solver.SolveIntents(),
 		builder.SendUserOperation(),
 		paymaster.IncOpsIncluded(),
 		check.Clean(),
@@ -187,7 +192,7 @@ func SearcherMode() {
 		g.Status(http.StatusOK)
 	})
 	handlers := []gin.HandlerFunc{
-		jsonrpc.Controller(client.NewRpcAdapter(c, d)),
+		jsonrpc.Controller(client.NewRpcAdapter(c, d), rpc, eth),
 		jsonrpc.WithOTELTracerAttributes(),
 	}
 	r.POST("/", handlers...)

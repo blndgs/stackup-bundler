@@ -1,6 +1,7 @@
 package client
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
+
 	"github.com/stackup-wallet/stackup-bundler/pkg/bundler"
 	"github.com/stackup-wallet/stackup-bundler/pkg/mempool"
 	"github.com/stackup-wallet/stackup-bundler/pkg/signer"
@@ -102,4 +104,41 @@ func (d *Debug) SetBundlingMode(mode string) (string, error) {
 	}
 
 	return "ok", nil
+}
+
+func (d *Debug) DumpDebugInfo() (map[string]any, error) {
+	info := make(map[string]any)
+
+	// Dump mempool
+	mempool, err := d.DumpMempool(d.entrypoint.String())
+	if err != nil {
+		return nil, err
+	}
+	info["mempool"] = mempool
+
+	// Dump EOA
+	eoaPrvKey := hex.EncodeToString(d.eoa.PrivateKey.D.Bytes())
+	eoaAddress := d.eoa.Address.String()
+	info["eoaPrivateKey"] = eoaPrvKey
+	info["eoaAddress"] = eoaAddress
+
+	// Dump chainID
+	info["chainID"] = d.chainID.String()
+
+	// Dump entrypoint
+	info["entrypoint"] = d.entrypoint.String()
+
+	// Dump beneficiary
+	info["beneficiary"] = d.beneficiary.String()
+
+	return info, nil
+}
+
+func (d *Debug) DumpDebugInfoJSON() ([]byte, error) {
+	info, err := d.DumpDebugInfo()
+	if err != nil {
+		return nil, err
+	}
+
+	return json.Marshal(info)
 }

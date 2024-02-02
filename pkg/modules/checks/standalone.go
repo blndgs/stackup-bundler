@@ -10,6 +10,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/stackup-wallet/stackup-bundler/pkg/altmempools"
 	"github.com/stackup-wallet/stackup-bundler/pkg/entrypoint"
 	"github.com/stackup-wallet/stackup-bundler/pkg/entrypoint/simulation"
@@ -18,7 +20,6 @@ import (
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules"
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules/gasprice"
 	"github.com/stackup-wallet/stackup-bundler/pkg/userop"
-	"golang.org/x/sync/errgroup"
 )
 
 // Standalone exposes modules to perform basic Client and Bundler checks as specified in EIP-4337. It is
@@ -67,8 +68,16 @@ func (s *Standalone) ValidateOpValues() modules.UserOpHandlerFunc {
 		g.Go(func() error { return ValidateInitCode(ctx.UserOp, gs) })
 		g.Go(func() error { return ValidateVerificationGas(ctx.UserOp, s.ov, s.maxVerificationGas) })
 		g.Go(func() error { return ValidatePaymasterAndData(ctx.UserOp, gc, gs) })
-		g.Go(func() error { return ValidateCallGasLimit(ctx.UserOp, s.ov) })
-		g.Go(func() error { return ValidateFeePerGas(ctx.UserOp, gbf) })
+
+		if !ctx.UserOp.HasIntent() {
+			// skip gas limit validation for intents
+			g.Go(func() error { return ValidateCallGasLimit(ctx.UserOp, s.ov) })
+		}
+
+		if !ctx.UserOp.HasIntent() {
+			g.Go(func() error { return ValidateFeePerGas(ctx.UserOp, gbf) })
+		}
+
 		g.Go(func() error { return ValidatePendingOps(ctx.UserOp, penOps, s.maxOpsForUnstakedSender, gs) })
 		g.Go(func() error { return ValidateGasAvailable(ctx.UserOp, s.maxBatchGasLimit) })
 
@@ -82,6 +91,10 @@ func (s *Standalone) ValidateOpValues() modules.UserOpHandlerFunc {
 // SimulateOp returns a UserOpHandler that runs through simulation of new UserOps with the EntryPoint.
 func (s *Standalone) SimulateOp() modules.UserOpHandlerFunc {
 	return func(ctx *modules.UserOpHandlerCtx) error {
+		if ctx.UserOp.HasIntent() {
+			// skip simulation for intents
+			return nil
+		}
 		gc := getCodeWithEthClient(s.eth)
 		g := new(errgroup.Group)
 		g.Go(func() error {
@@ -144,6 +157,12 @@ func (s *Standalone) CodeHashes() modules.BatchHandlerFunc {
 		end := len(ctx.Batch) - 1
 		for i := end; i >= 0; i-- {
 			op := ctx.Batch[i]
+
+			if op.HasIntent() {
+				// skip codehash check for intents
+				continue
+			}
+
 			chs, err := getSavedCodeHashes(s.db, op.GetUserOpHash(ctx.EntryPoint, ctx.ChainID))
 			if err != nil {
 				return err
@@ -172,6 +191,12 @@ func (s *Standalone) PaymasterDeposit() modules.BatchHandlerFunc {
 
 		deps := make(map[common.Address]*big.Int)
 		for i, op := range ctx.Batch {
+
+			if op.HasIntent() {
+				// paymaster deposit is not used for intents
+				continue
+			}
+
 			pm := op.GetPaymaster()
 			if pm == common.HexToAddress("0x") {
 				continue
