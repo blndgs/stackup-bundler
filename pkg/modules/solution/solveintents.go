@@ -152,6 +152,42 @@ func (ei *IntentsHandler) SolveIntents() modules.BatchHandlerFunc {
 	}
 }
 
+func ReportSolverHealth(solverURL string) error {
+	parsedURL, err := url.Parse(solverURL)
+	if err != nil {
+		println("Error parsing Solver URL: ", solverURL, ", ", err)
+		return err
+	}
+
+	parsedURL.Path = "/health"
+	parsedURL.RawQuery = ""
+	parsedURL.Fragment = ""
+
+	solverURL = parsedURL.String()
+	println("Requesting solver health at ", solverURL)
+
+	handler := New(solverURL)
+
+	req, err := http.NewRequest(http.MethodGet, solverURL, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := handler.SolverClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	println("Solver health response: ", resp.Status)
+	_, err = io.Copy(os.Stdout, resp.Body)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // sendToSolver sends the batch of UserOperations to the Solver.
 func (ei *IntentsHandler) sendToSolver(body model.BodyOfUserOps) error {
 	jsonBody, err := json.Marshal(body)
