@@ -65,21 +65,6 @@ func (ei *IntentsHandler) bufferIntentOps(entrypoint common.Address, chainID *bi
 	}
 	for idx, op := range userOpBatch {
 		if op.HasIntent() {
-			intent, err := op.GetIntent()
-			if err != nil {
-				// invalid Intent: drop the UserOperation from the batch
-				continue
-			}
-
-			intent.ChainID = chainID
-
-			marshalledIntent, err := json.Marshal(intent)
-			if err != nil {
-				// corrupted intent: drop the UserOperation from the batch
-				continue
-			}
-			op.SetIntent(string(marshalledIntent))
-			
 			hashID := op.GetUserOpHash(entrypoint, chainID).String()
 
 			// Don't mutate the original op
