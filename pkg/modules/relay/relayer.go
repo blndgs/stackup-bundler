@@ -142,6 +142,7 @@ func (r *Relayer) SendUserOperation() modules.BatchHandlerFunc {
 						}
 						return fmt.Errorf("%s, %s", rpcErr, foErr)
 					}
+					fmt.Printf("RPC Error: %+v\n", fo)
 					return apperrors.NewRPCError(apperrors.REJECTED_BY_EP_OR_ACCOUNT, fo.Reason, fo)
 				}
 				fmt.Printf("res: %+v\n", res)

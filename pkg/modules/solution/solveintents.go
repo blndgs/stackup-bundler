@@ -16,8 +16,11 @@ package solution
 
 import (
 	"bytes"
+	"io"
 	"math/big"
 	"net/http"
+	"net/url"
+	"os"
 	"time"
 	"unsafe"
 
@@ -112,10 +115,13 @@ func (ei *IntentsHandler) SolveIntents() modules.BatchHandlerFunc {
 
 		for idx, opExt := range body.UserOpsExt {
 			batchIndex := batchIntentIndices[opHashID(body.UserOpsExt[idx].OriginalHashValue)]
+			// print to stdout the userOp and Intent JSON
+			println("Solver response, status:", opExt.ProcessingStatus, ", batchIndex:", batchIndex, ", hash:", body.UserOpsExt[idx].OriginalHashValue)
 			switch opExt.ProcessingStatus {
 			case model.Unsolved, model.Expired, model.Invalid, model.Received:
 				// dropping further processing
 				ctx.MarkOpIndexForRemoval(int(batchIndex))
+				println("Solver dropping userOp: ", body.UserOps[idx].String())
 			case model.Solved:
 				// set the solved userOp values to the received batch's userOp values
 				ctx.Batch[batchIndex].CallData = make([]byte, len(body.UserOps[idx].CallData))
