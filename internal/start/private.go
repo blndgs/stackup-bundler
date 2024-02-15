@@ -127,7 +127,11 @@ func PrivateMode() {
 
 	exp := expire.New(conf.MaxOpTTL)
 
+	println("solver URL:", conf.SolverUrl)
 	solver := solution.New(conf.SolverUrl)
+	if err := solution.ReportSolverHealth(conf.SolverUrl); err != nil {
+		log.Fatal(err)
+	}
 
 	relayer := relay.New(eoa, eth, chain, beneficiary, logr)
 

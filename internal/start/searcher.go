@@ -117,8 +117,11 @@ func SearcherMode() {
 
 	exp := expire.New(conf.MaxOpTTL)
 
-	// Init Intents Solver
+	println("solver URL:", conf.SolverUrl)
 	solver := solution.New(conf.SolverUrl)
+	if err := solution.ReportSolverHealth(conf.SolverUrl); err != nil {
+		log.Fatal(err)
+	}
 
 	builder := builder.New(eoa, eth, fb, beneficiary, conf.BlocksInTheFuture)
 

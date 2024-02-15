@@ -16,8 +16,11 @@ package solution
 
 import (
 	"bytes"
+	"io"
 	"math/big"
 	"net/http"
+	"net/url"
+	"os"
 	"time"
 	"unsafe"
 
@@ -65,21 +68,6 @@ func (ei *IntentsHandler) bufferIntentOps(entrypoint common.Address, chainID *bi
 	}
 	for idx, op := range userOpBatch {
 		if op.HasIntent() {
-			intent, err := op.GetIntent()
-			if err != nil {
-				// invalid Intent: drop the UserOperation from the batch
-				continue
-			}
-
-			intent.ChainID = chainID
-
-			marshalledIntent, err := json.Marshal(intent)
-			if err != nil {
-				// corrupted intent: drop the UserOperation from the batch
-				continue
-			}
-			op.SetIntent(string(marshalledIntent))
-			
 			hashID := op.GetUserOpHash(entrypoint, chainID).String()
 
 			// Don't mutate the original op
@@ -127,10 +115,13 @@ func (ei *IntentsHandler) SolveIntents() modules.BatchHandlerFunc {
 
 		for idx, opExt := range body.UserOpsExt {
 			batchIndex := batchIntentIndices[opHashID(body.UserOpsExt[idx].OriginalHashValue)]
+			// print to stdout the userOp and Intent JSON
+			println("Solver response, status:", opExt.ProcessingStatus, ", batchIndex:", batchIndex, ", hash:", body.UserOpsExt[idx].OriginalHashValue)
 			switch opExt.ProcessingStatus {
 			case model.Unsolved, model.Expired, model.Invalid, model.Received:
 				// dropping further processing
 				ctx.MarkOpIndexForRemoval(int(batchIndex))
+				println("Solver dropping userOp: ", body.UserOps[idx].String())
 			case model.Solved:
 				// set the solved userOp values to the received batch's userOp values
 				ctx.Batch[batchIndex].CallData = make([]byte, len(body.UserOps[idx].CallData))
@@ -150,6 +141,42 @@ func (ei *IntentsHandler) SolveIntents() modules.BatchHandlerFunc {
 
 		return nil
 	}
+}
+
+func ReportSolverHealth(solverURL string) error {
+	parsedURL, err := url.Parse(solverURL)
+	if err != nil {
+		println("Error parsing Solver URL: ", solverURL, ", ", err)
+		return err
+	}
+
+	parsedURL.Path = "/health"
+	parsedURL.RawQuery = ""
+	parsedURL.Fragment = ""
+
+	solverURL = parsedURL.String()
+	println("Requesting solver health at ", solverURL)
+
+	handler := New(solverURL)
+
+	req, err := http.NewRequest(http.MethodGet, solverURL, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := handler.SolverClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	println("Solver health response: ", resp.Status)
+	_, err = io.Copy(os.Stdout, resp.Body)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // sendToSolver sends the batch of UserOperations to the Solver.
