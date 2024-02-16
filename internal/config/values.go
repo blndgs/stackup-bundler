@@ -168,6 +168,10 @@ func GetValues() *Values {
 		panic("Fatal config error: erc4337_bundler_alt_mempool_ids is set without specifying an IPFS gateway")
 	}
 
+	if variableNotSetOrIsNil("solver_url") && !strings.Contains(viper.GetString("solver_url"), "/solve") {
+		panic("Fatal config error: solver_url not set")
+	}
+
 	// Return Values
 	privateKey := viper.GetString("erc4337_bundler_private_key")
 	ethClientUrl := viper.GetString("erc4337_bundler_eth_client_url")
