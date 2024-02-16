@@ -130,6 +130,7 @@ func GetValues() *Values {
 	_ = viper.BindEnv("erc4337_bundler_alt_mempool_ids")
 	_ = viper.BindEnv("erc4337_bundler_debug_mode")
 	_ = viper.BindEnv("erc4337_bundler_gin_mode")
+	_ = viper.BindEnv("solver_url")
 
 	// Validate required variables
 	if variableNotSetOrIsNil("erc4337_bundler_eth_client_url") {
