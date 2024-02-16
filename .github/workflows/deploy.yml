@@ -58,6 +58,7 @@ jobs:
             yq w -i docker-compose.yaml 'services.stackup-bundler.environment[1]' "ERC4337_BUNDLER_PRIVATE_KEY=${{ secrets.ERC4337_BUNDLER_PRIVATE_KEY }}" 
             yq w -i docker-compose.yaml 'services.stackup-bundler.environment[2]' "ERC4337_BUNDLER_MAX_BATCH_GAS_LIMIT=${{ vars.ERC4337_BUNDLER_MAX_BATCH_GAS_LIMIT }}" 
             yq w -i docker-compose.yaml 'services.stackup-bundler.environment[3]' "ERC4337_BUNDLER_DEBUG_MODE=${{ vars.ERC4337_BUNDLER_DEBUG_MODE }}" 
+            yq w -i docker-compose.yaml 'services.stackup-bundler.environment[4]' "SOLVER_URL=${{ vars.SOLVER_URL }}"
             docker-compose up -d
 
       # Catch SSM outputs
