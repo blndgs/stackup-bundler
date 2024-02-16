@@ -94,7 +94,7 @@ func GetValues() *Values {
 	viper.SetDefault("erc4337_bundler_otel_insecure_mode", false)
 	viper.SetDefault("erc4337_bundler_debug_mode", false)
 	viper.SetDefault("erc4337_bundler_gin_mode", gin.ReleaseMode)
-	viper.SetDefault("solver_url", "http://localhost:7322/solve")
+	viper.SetDefault("solver_url", "http://localhost:7322/solve-native")
 
 	// Read in from .env file if available
 	viper.SetConfigName(".env")
@@ -166,6 +166,10 @@ func GetValues() *Values {
 	if viper.IsSet("erc4337_bundler_alt_mempool_ids") &&
 		variableNotSetOrIsNil("erc4337_bundler_alt_mempool_ipfs_gateway") {
 		panic("Fatal config error: erc4337_bundler_alt_mempool_ids is set without specifying an IPFS gateway")
+	}
+
+	if variableNotSetOrIsNil("solver_url") && !strings.Contains(viper.GetString("solver_url"), "/solve") {
+		panic("Fatal config error: solver_url not set")
 	}
 
 	// Return Values
