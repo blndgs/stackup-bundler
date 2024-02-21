@@ -14,7 +14,6 @@ import (
 
 	"github.com/stackup-wallet/stackup-bundler/pkg/entrypoint/reverts"
 	"github.com/stackup-wallet/stackup-bundler/pkg/entrypoint/transaction"
-	apperrors "github.com/stackup-wallet/stackup-bundler/pkg/errors"
 	"github.com/stackup-wallet/stackup-bundler/pkg/modules"
 	"github.com/stackup-wallet/stackup-bundler/pkg/signer"
 	"github.com/stackup-wallet/stackup-bundler/pkg/userop"
@@ -131,21 +130,19 @@ func (r *Relayer) SendUserOperation() modules.BatchHandlerFunc {
 
 			err := handleOps(ctx, opts)
 			if err != nil {
-				res, rpcErr := reverts.NewExecutionResult(err)
-				if rpcErr != nil {
-					println("rpcErr:", rpcErr.Error())
-					fo, foErr := reverts.NewFailedOp(err)
-					if foErr != nil {
-						println("foErr:", foErr.Error())
-						if err != nil {
-							return err
-						}
-						return fmt.Errorf("%s, %s", rpcErr, foErr)
-					}
-					fmt.Printf("RPC Error: %+v\n", fo)
-					return apperrors.NewRPCError(apperrors.REJECTED_BY_EP_OR_ACCOUNT, fo.Reason, fo)
+				println("error:", err.Error())
+				fo, foErr := reverts.NewFailedOp(err)
+				if foErr != nil {
+					fmt.Printf("foErr:%+v\n", foErr)
 				}
-				fmt.Printf("res: %+v\n", res)
+				if fo != nil {
+					println("EVM Reason:", fo.Reason)
+				}
+				println()
+				// Not sure if it's effective to return an error
+				// And keep recycling attempts to submit a likely
+				// invalid userOp.
+				// return apperrors.NewRPCError(apperrors.REJECTED_BY_EP_OR_ACCOUNT, fo.Reason, fo)
 			}
 		}
 
