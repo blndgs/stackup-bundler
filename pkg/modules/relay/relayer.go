@@ -140,10 +140,10 @@ func (r *Relayer) SendUserOperation() modules.BatchHandlerFunc {
 						if err != nil {
 							return err
 						}
-						return fmt.Errorf("%s, %s", rpcErr, foErr)
-					}
-					fmt.Printf("RPC Error: %+v\n", fo)
-					return apperrors.NewRPCError(apperrors.REJECTED_BY_EP_OR_ACCOUNT, fo.Reason, fo)
+				// Not sure if it's effective to return an error
+				// And keep recycling attempts to submit a likely
+				// invalid userOp.
+				// return apperrors.NewRPCError(apperrors.REJECTED_BY_EP_OR_ACCOUNT, fo.Reason, fo)
 				}
 				fmt.Printf("res: %+v\n", res)
 			}
