@@ -155,6 +155,7 @@ func handleOps(ctx *modules.BatchHandlerCtx, opts transaction.Opts) error {
 		return err
 	} else {
 		ctx.Data["txn_hash"] = txn.Hash().String()
+		fmt.Println("txn_hash:", txn.Hash().String())
 	}
 
 	return nil
