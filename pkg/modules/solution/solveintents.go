@@ -16,6 +16,7 @@ package solution
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"math/big"
 	"net/http"
@@ -107,10 +108,7 @@ func (ei *IntentsHandler) SolveIntents() modules.BatchHandlerFunc {
 		}
 
 		if err := ei.sendToSolver(body); err != nil {
-			// swallow Solver connectivity error here to avoid
-			// an infinite loop of retries for the same batch till the
-			// batch expires or the solver is back online.
-			return nil
+			return err
 		}
 
 		for idx, opExt := range body.UserOpsExt {
