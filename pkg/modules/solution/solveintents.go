@@ -155,7 +155,7 @@ func ReportSolverHealth(solverURL string) error {
 	parsedURL.Fragment = ""
 
 	solverURL = parsedURL.String()
-	println("Requesting solver health at ", solverURL)
+	fmt.Println("Requesting solver health at ", solverURL)
 
 	handler := New(solverURL)
 
@@ -170,7 +170,7 @@ func ReportSolverHealth(solverURL string) error {
 	}
 	defer resp.Body.Close()
 
-	println("Solver health response: ", resp.Status)
+	fmt.Println("Solver health response: ", resp.Status)
 	_, err = io.Copy(os.Stdout, resp.Body)
 	if err != nil {
 		return err
@@ -195,6 +195,8 @@ func (ei *IntentsHandler) sendToSolver(body model.BodyOfUserOps) error {
 
 	resp, err := ei.SolverClient.Do(req)
 	if err != nil {
+		println("Solver request failed at URL: ", ei.SolverURL)
+		println("Solver error: ", err)
 		return err
 	}
 	defer resp.Body.Close()

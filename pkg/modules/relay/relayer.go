@@ -119,26 +119,26 @@ func (r *Relayer) SendUserOperation() modules.BatchHandlerFunc {
 
 		if len(intentsBatch) > 0 {
 			opts := r.getCallOptions(ctx, intentsBatch)
-			println()
+			fmt.Println()
 			for _, op := range intentsBatch {
 				// cast to print it
 				operation := model.UserOperation(*op)
-				println(operation.String())
+				fmt.Println(operation.String())
 			}
-			println()
-			println("--> handleOps")
+			fmt.Println()
+			fmt.Println("--> handleOps")
 
 			err := handleOps(ctx, opts)
 			if err != nil {
-				println("error:", err.Error())
+				fmt.Println("error:", err.Error())
 				fo, foErr := reverts.NewFailedOp(err)
 				if foErr != nil {
 					fmt.Printf("foErr:%+v\n", foErr)
 				}
 				if fo != nil {
-					println("EVM Reason:", fo.Reason)
+					fmt.Println("EVM Reason:", fo.Reason)
 				}
-				println()
+				fmt.Printf("\n")
 				// Not sure if it's effective to return an error
 				// And keep recycling attempts to submit a likely
 				// invalid userOp.
