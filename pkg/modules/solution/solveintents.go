@@ -16,6 +16,7 @@ package solution
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"math/big"
 	"net/http"
@@ -107,10 +108,7 @@ func (ei *IntentsHandler) SolveIntents() modules.BatchHandlerFunc {
 		}
 
 		if err := ei.sendToSolver(body); err != nil {
-			// swallow Solver connectivity error here to avoid
-			// an infinite loop of retries for the same batch till the
-			// batch expires or the solver is back online.
-			return nil
+			return err
 		}
 
 		for idx, opExt := range body.UserOpsExt {
@@ -155,7 +153,7 @@ func ReportSolverHealth(solverURL string) error {
 	parsedURL.Fragment = ""
 
 	solverURL = parsedURL.String()
-	println("Requesting solver health at ", solverURL)
+	fmt.Println("Requesting solver health at ", solverURL)
 
 	handler := New(solverURL)
 
@@ -170,7 +168,7 @@ func ReportSolverHealth(solverURL string) error {
 	}
 	defer resp.Body.Close()
 
-	println("Solver health response: ", resp.Status)
+	fmt.Println("Solver health response: ", resp.Status)
 	_, err = io.Copy(os.Stdout, resp.Body)
 	if err != nil {
 		return err
@@ -195,6 +193,8 @@ func (ei *IntentsHandler) sendToSolver(body model.BodyOfUserOps) error {
 
 	resp, err := ei.SolverClient.Do(req)
 	if err != nil {
+		println("Solver request failed at URL: ", ei.SolverURL)
+		println("Solver error: ", err)
 		return err
 	}
 	defer resp.Body.Close()
