@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/go-logr/logr"
+
 	"github.com/stackup-wallet/stackup-bundler/internal/logger"
 	"github.com/stackup-wallet/stackup-bundler/pkg/entrypoint/filter"
 	"github.com/stackup-wallet/stackup-bundler/pkg/gas"
@@ -236,6 +237,20 @@ func (i *Client) GetUserOperationReceipt(
 ) (*filter.UserOperationReceipt, error) {
 	// Init logger
 	l := i.logger.WithName("eth_getUserOperationReceipt").WithValues("userop_hash", hash)
+
+	pooled, err := i.mempool.HasUserOpHash(hash)
+	if err != nil {
+		l.Error(err, "mempool.HashUserOpHash error")
+		return nil, err
+	}
+
+	if pooled {
+		// UserOperation is in mempool
+		l.Info("mempool.HasUserOpHash returned true: " + hash)
+		var r filter.UserOperationReceipt
+		r.Nonce = "-1"
+		return &r, nil
+	}
 
 	ev, err := i.getUserOpReceipt(hash, i.supportedEntryPoints[0])
 	if err != nil {
