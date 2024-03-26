@@ -27,6 +27,24 @@ func New(db *badger.DB) (*Mempool, error) {
 	return &Mempool{db, queue}, nil
 }
 
+// HasUserOpHash returns true if the UserOperation with the given userOpHash is
+// in the mempool.
+func (m *Mempool) HasUserOpHash(userOpHash string) (bool, error) {
+	err := m.db.View(func(txn *badger.Txn) error {
+		_, err := txn.Get([]byte(userOpHash))
+		return err
+	})
+
+	if err == badger.ErrKeyNotFound {
+
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
 // GetOps returns all the UserOperations associated with an EntryPoint and Sender address.
 func (m *Mempool) GetOps(entryPoint common.Address, sender common.Address) ([]*userop.UserOperation, error) {
 	ops := m.queue.GetOps(entryPoint, sender)

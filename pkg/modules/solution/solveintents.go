@@ -99,6 +99,11 @@ func (ei *IntentsHandler) SolveIntents() modules.BatchHandlerFunc {
 		// to be sent to the Solver
 		modelUserOps := *(*[]*model.UserOperation)(unsafe.Pointer(&ctx.Batch))
 
+		println("Received batch of UserOperations for solution: ", len(modelUserOps))
+		for idx, op := range modelUserOps {
+			println("Received UserOperation: [", idx, "], isIntent", op.HasIntent(), "op:", op.String())
+		}
+
 		// Prepare the body to send to the Solver
 		body := ei.bufferIntentOps(ctx.EntryPoint, ctx.ChainID, batchIntentIndices, modelUserOps)
 

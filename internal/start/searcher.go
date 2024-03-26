@@ -40,7 +40,8 @@ func SearcherMode() {
 
 	logr := logger.NewZeroLogr().
 		WithName("stackup_bundler").
-		WithValues("bundler_mode", "searcher")
+		WithValues("bundler_mode", "searcher").
+		V(1)
 
 	eoa, err := signer.New(conf.PrivateKey)
 	if err != nil {

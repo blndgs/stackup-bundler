@@ -39,7 +39,8 @@ func PrivateMode() {
 
 	logr := logger.NewZeroLogr().
 		WithName("stackup_bundler").
-		WithValues("bundler_mode", "private")
+		WithValues("bundler_mode", "private").
+		V(1)
 
 	eoa, err := signer.New(conf.PrivateKey)
 	if err != nil {
